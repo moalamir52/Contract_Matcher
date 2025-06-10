@@ -410,20 +410,22 @@ export default function App() {
       fontFamily: "Tajawal, Arial, sans-serif"
     }}>
       <button
-        onClick={() => window.location.reload()}
+        onClick={() => window.location.href = "https://moalamir52.github.io/Yelo/#dashboard"}
         style={{
-          margin: "32px 0 0 32px",
+          margin: "24px 0 16px 24px",
           background: "#FFD600",
           color: "#673ab7",
           border: "2px solid #673ab7",
           borderRadius: 8,
           fontWeight: "bold",
           fontSize: 18,
-          padding: "8px 24px",
+          padding: "10px 28px",
           cursor: "pointer",
           boxShadow: "0 2px 8px #FFD60044"
         }}
-      >← Back to YELO</button>
+      >
+        ← Back to YELO
+      </button>
 
       <div style={{
         maxWidth: 900,
