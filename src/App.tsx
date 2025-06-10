@@ -1,4 +1,4 @@
-// CarRentalFilterFinal.tsx
+// App.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 
@@ -28,17 +28,16 @@ function formatDate(value: any): string {
   return date.toLocaleDateString('en-GB');
 }
 
-export default function CarRentalFilter() {
-  const [contracts, setContracts] = useState([]);
-  const [filtered, setFiltered] = useState([]);
+export default function App() {
+  const [view, setView] = useState<'contracts' | 'unrented' | 'repeated'>('contracts');
+  const [contracts, setContracts] = useState<any[]>([]);
+  const [filtered, setFiltered] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [showRepeated, setShowRepeated] = useState(false);
   const [selectedContract, setSelectedContract] = useState<any | null>(null);
   const [invygoPlates, setInvygoPlates] = useState<string[]>([]);
   const [unrentedPlates, setUnrentedPlates] = useState<string[]>([]);
-  const [showUnrentedTable, setShowUnrentedTable] = useState(false);
   const [repeatedContracts, setRepeatedContracts] = useState<any[]>([]);
   const modalRef = useRef(null);
 
@@ -46,7 +45,6 @@ export default function CarRentalFilter() {
     const handleClickOutside = (e: any) => {
       if (modalRef.current && !(modalRef.current as any).contains(e.target)) {
         setSelectedContract(null);
-        setShowRepeated(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -54,28 +52,35 @@ export default function CarRentalFilter() {
   }, []);
 
   const handleFileUpload = (e: any) => {
-    const file = e.target.files[0];
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
     const reader = new FileReader();
     reader.onload = (evt: any) => {
       const data = new Uint8Array(evt.target.result);
       const workbook = XLSX.read(data, { type: 'array' });
       const sheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(sheet).filter(row => Object.values(row).some(v => v !== null && v !== ''));
-      setContracts(jsonData as any[]);
+      const sheet = workbook.Sheets[sheetName] as XLSX.WorkSheet;
+      const jsonData = XLSX.utils.sheet_to_json(sheet).filter((row: any) =>
+        Object.values(row).some(v => v !== null && v !== '')
+      );
+      setContracts(jsonData);
     };
     reader.readAsArrayBuffer(file);
   };
 
   const handleInvygoUpload = (e: any) => {
-    const file = e.target.files[0];
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
     const reader = new FileReader();
     reader.onload = (evt: any) => {
       const data = new Uint8Array(evt.target.result);
       const workbook = XLSX.read(data, { type: 'array' });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(sheet).filter(row => Object.values(row).some(v => v !== null && v !== ''));
-      const plates = jsonData.map((row: any) => (row['Plate No'] || '').toString().replace(/\s/g, '').trim());
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName] as XLSX.WorkSheet;
+      const jsonData = XLSX.utils.sheet_to_json(sheet).filter((row: any) =>
+        Object.values(row).some(v => v !== null && v !== '')
+      );
+      const plates = jsonData.map((row: any) => (row['Plate'] || '').toString().replace(/\s/g, '').trim());
       setInvygoPlates(plates);
     };
     reader.readAsArrayBuffer(file);
@@ -89,16 +94,16 @@ export default function CarRentalFilter() {
     const result = contracts.filter((c: any) => {
       const pickup = parseExcelDate(c['Pick-up Date']);
       const dropoff = parseExcelDate(c['Drop-off Date']);
-      const plate = (c['Plate No.'] || '').toString().replace(/\s/g, '').trim();
+      const plate = (c['Plate No.'] || c['Plate'] || '').toString().replace(/\s/g, '').trim();
       return pickup && dropoff && pickup <= end && dropoff >= start && invygoPlates.includes(plate);
     });
 
-    const rentedPlates = new Set(result.map((c: any) => (c['Plate No.'] || '').toString().replace(/\s/g, '').trim()));
+    const rentedPlates = new Set(result.map((c: any) => (c['Plate No.'] || c['Plate'] || '').toString().replace(/\s/g, '').trim()));
     const notRented = invygoPlates.filter(plate => !rentedPlates.has(plate));
 
     const grouped: Record<string, any[]> = {};
     result.forEach((c: any) => {
-      const plate = c['Plate No.'] || 'Unknown';
+      const plate = c['Plate No.'] || c['Plate'] || 'Unknown';
       if (!grouped[plate]) grouped[plate] = [];
       grouped[plate].push(c);
     });
@@ -121,138 +126,616 @@ export default function CarRentalFilter() {
     return dateA - dateB;
   });
 
-  return (
-    <div className="p-4 max-w-screen-lg mx-auto">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold text-purple-800">📁 رفع ملف العقود</h2>
-        {filtered.length > 0 && repeatedContracts.length > 0 && (
-          <button
-            onClick={() => setShowRepeated(!showRepeated)}
-            className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-500"
-          >
-            🚗 عرض السيارات المكررة
-          </button>
-        )}
-      </div>
+  const contractsToShow = searched;
+  const unrentedToShow = unrentedPlates.filter(plate =>
+    plate.toLowerCase().includes(search.toLowerCase())
+  );
+  const repeatedToShow = repeatedContracts
+    .filter(([plate]) => plate.toLowerCase().includes(search.toLowerCase()));
 
-      <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} className="mb-2" />
-      <input type="file" accept=".xlsx, .xls" onChange={handleInvygoUpload} className="mb-4" />
-
-      <div className="mb-4 flex flex-wrap gap-2 items-center">
-        <label className="mr-2">من:</label>
-        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="border rounded px-2 py-1" />
-        <label className="mx-2">إلى:</label>
-        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="border rounded px-2 py-1" />
-        <button onClick={filterContracts} className="bg-yellow-400 text-black px-4 py-1 rounded hover:bg-yellow-300 transition">عرض العقود</button>
-        <input type="text" placeholder="🔍 بحث" value={search} onChange={e => setSearch(e.target.value)} className="border px-2 py-1 rounded ml-4" />
-        {unrentedPlates.length > 0 && (
-          <button onClick={() => setShowUnrentedTable(!showUnrentedTable)} className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-500">🚫 عرض الغير مؤجرة</button>
-        )}
-      </div>
-
-      {showRepeated && (
-        <div className="fixed top-0 left-0 w-full h-full bg-black bg-opacity-50 flex justify-center items-center z-50">
-          <div ref={modalRef} className="bg-white p-6 rounded shadow max-w-xl w-full">
-            <h3 className="text-lg font-bold text-purple-700 mb-4">🚗 سيارات مكررة</h3>
-            <table className="w-full text-sm border">
-              <thead>
-                <tr className="bg-yellow-100">
-                  <th className="border p-1">Plate No.</th>
-                  <th className="border p-1"># Rentals</th>
-                  <th className="border p-1">Contract Numbers</th>
-                </tr>
-              </thead>
-              <tbody>
-                {repeatedContracts.map(([plate, rows], i) => (
-                  <tr key={i} className="border">
-                    <td className="border p-1 font-semibold">{plate}</td>
-                    <td className="border p-1 text-center">{rows.length}</td>
-                    <td className="border p-1">
-                      {rows.map((r: any, idx: number) => (
-                        <div key={idx}>{r['Contract No.']}</div>
-                      ))}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {filtered.length > 0 && (
-        <>
-          <h3 className="font-semibold mb-2 text-green-700">📋 عقود سيارات Invygo خلال الفترة:</h3>
-          <div className="overflow-auto max-h-[500px]">
-            <table className="w-full text-sm border">
-              <thead>
-                <tr className="bg-purple-100">
-                  <th className="border p-1">#</th>
-                  <th className="border p-1">Contract No.</th>
-                  <th className="border p-1">Customer</th>
-                  <th className="border p-1">Plate No.</th>
-                  <th className="border p-1">Pick-up</th>
-                  <th className="border p-1">Drop-off</th>
-                </tr>
-              </thead>
-              <tbody>
-                {searched.map((c: any, index) => (
-                  <tr
-                    key={index}
-                    className="border hover:bg-yellow-50 cursor-pointer"
+  // جدول العقود
+  const ContractsTable = (
+    <div>
+      <h2 style={{
+        color: "#673ab7",
+        fontWeight: "bold",
+        marginTop: 24,
+        fontSize: 28,
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        letterSpacing: 1
+      }}>
+        <span role="img" aria-label="doc">📄</span> Contracts
+      </h2>
+      <div style={{
+        background: "#fff",
+        borderRadius: 18,
+        boxShadow: "0 8px 32px #FFD60055",
+        padding: 0,
+        marginTop: 18,
+        overflow: "auto",
+        border: "2px solid #FFD600"
+      }}>
+        <table style={{
+          width: "100%",
+          borderCollapse: "separate",
+          borderSpacing: 0,
+          fontSize: 16,
+          minWidth: 700
+        }}>
+          <thead>
+            <tr style={{
+              background: "linear-gradient(90deg,#FFD600 60%,#fffbe7 100%)",
+              color: "#222",
+              fontWeight: "bold",
+              fontSize: 18,
+              boxShadow: "0 2px 8px #FFD60055"
+            }}>
+              <th style={{ padding: "16px 8px", borderTopLeftRadius: 18, borderBottom: "2px solid #FFD600", textAlign: "center" }}>#</th>
+              <th style={{ padding: "16px 8px", borderBottom: "2px solid #FFD600", textAlign: "center" }}>Contract No.</th>
+              <th style={{ padding: "16px 8px", borderBottom: "2px solid #FFD600", textAlign: "center" }}>Customer</th>
+              <th style={{ padding: "16px 8px", borderBottom: "2px solid #FFD600", textAlign: "center" }}>Plate No.</th>
+              <th style={{ padding: "16px 8px", borderBottom: "2px solid #FFD600", textAlign: "center" }}>Pick-up</th>
+              <th style={{ padding: "16px 8px", borderTopRightRadius: 18, borderBottom: "2px solid #FFD600", textAlign: "center" }}>Drop-off</th>
+            </tr>
+          </thead>
+          <tbody>
+            {contractsToShow.length > 0 ? (
+              contractsToShow.map((c: any, index) => (
+                <tr key={index} style={{
+                  background: index % 2 === 0 ? "#FFFDE7" : "#fff",
+                  transition: "background 0.2s",
+                  borderBottom: "1px solid #f3e6b3"
+                }}>
+                  <td style={{ padding: "12px 8px", textAlign: "center", color: "#888", fontWeight: "bold" }}>{index + 1}</td>
+                  <td style={{
+                    padding: "12px 8px",
+                    color: "#1976d2",
+                    fontWeight: "bold",
+                    cursor: "pointer",
+                    borderRadius: 8,
+                    transition: "background 0.2s, color 0.2s",
+                    textAlign: "center"
+                  }}
                     onClick={() => setSelectedContract(c)}
-                  >
-                    <td className="border p-1 text-center">{index + 1}</td>
-                    <td className="border p-1">{c['Contract No.']}</td>
-                    <td className="border p-1">{c['Customer']}</td>
-                    <td className="border p-1">{c['Plate No.']}</td>
-                    <td className="border p-1">{formatDate(c['Pick-up Date'])}</td>
-                    <td className="border p-1">{formatDate(c['Drop-off Date'])}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
-
-      {showUnrentedTable && unrentedPlates.length > 0 && (
-        <div className="mt-6">
-          <h3 className="font-semibold text-red-700 mb-2">🚫 سيارات Invygo لم تُؤجر خلال الفترة:</h3>
-          <table className="w-full text-sm border">
-            <thead>
-              <tr className="bg-red-100">
-                <th className="border p-1">#</th>
-                <th className="border p-1">Plate No.</th>
-              </tr>
-            </thead>
-            <tbody>
-              {unrentedPlates.map((plate, idx) => (
-                <tr key={idx}>
-                  <td className="border p-1 text-center">{idx + 1}</td>
-                  <td className="border p-1">{plate}</td>
+                    title="Show contract details"
+                    onMouseOver={e => {
+                      (e.currentTarget as HTMLElement).style.background = "#673ab7";
+                      (e.currentTarget as HTMLElement).style.color = "#FFD600";
+                    }}
+                    onMouseOut={e => {
+                      (e.currentTarget as HTMLElement).style.background = "";
+                      (e.currentTarget as HTMLElement).style.color = "#1976d2";
+                    }}
+                  >{c['Contract No.']}</td>
+                  <td style={{ padding: "12px 8px", textAlign: "center" }}>{c['Customer']}</td>
+                  <td style={{ padding: "12px 8px", textAlign: "center" }}>{c['Plate No.']}</td>
+                  <td style={{ padding: "12px 8px", textAlign: "center" }}>{formatDate(c['Pick-up Date'])}</td>
+                  <td style={{ padding: "12px 8px", textAlign: "center" }}>{formatDate(c['Drop-off Date'])}</td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              ))
+            ) : (
+              <tr>
+                <td colSpan={6} style={{ textAlign: "center", color: "#888", padding: 24 }}>
+                  No contracts found.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 
-      {selectedContract && (
-        <div className="fixed top-0 left-0 w-full h-full bg-black bg-opacity-50 flex justify-center items-center z-50">
-          <div ref={modalRef} className="bg-white p-6 rounded shadow max-w-xl w-full overflow-y-auto max-h-[80vh]">
-            <h3 className="text-lg font-bold text-purple-700 mb-4">📄 تفاصيل العقد</h3>
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              {Object.entries(selectedContract).map(([key, value], idx) => (
-                <div key={idx} className="flex">
-                  <div className="font-semibold w-40 text-purple-800">{key}:</div>
-                  <div>{key.includes('Date') ? formatDate(value) : value?.toString()}</div>
-                </div>
-              ))}
+  // جدول السيارات غير المؤجرة
+  const UnrentedTable = (
+    <div>
+      <h2 style={{
+        color: "#388e3c",
+        fontWeight: "bold",
+        marginTop: 32,
+        fontSize: 28,
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        letterSpacing: 1
+      }}>
+        <span role="img" aria-label="car">🚫</span> Unrented Cars
+      </h2>
+      <div style={{
+        background: "#fff",
+        borderRadius: 18,
+        boxShadow: "0 8px 32px #FFD60055",
+        padding: 0,
+        marginTop: 18,
+        overflow: "auto",
+        border: "2px solid #FFD600"
+      }}>
+        <table style={{
+          width: "100%",
+          borderCollapse: "separate",
+          borderSpacing: 0,
+          fontSize: 16,
+          minWidth: 400
+        }}>
+          <thead>
+            <tr style={{
+              background: "linear-gradient(90deg,#FFD600 60%,#fffbe7 100%)",
+              color: "#222",
+              fontWeight: "bold",
+              fontSize: 18,
+              boxShadow: "0 2px 8px #FFD60055"
+            }}>
+              <th style={{ padding: "16px 8px", borderTopLeftRadius: 18, borderBottom: "2px solid #FFD600", textAlign: "center" }}>#</th>
+              <th style={{ padding: "16px 8px", borderTopRightRadius: 18, borderBottom: "2px solid #FFD600", textAlign: "center" }}>Plate No.</th>
+            </tr>
+          </thead>
+          <tbody>
+            {unrentedToShow.length > 0 ? (
+              unrentedToShow.map((plate, idx) => (
+                <tr key={idx} style={{
+                  background: idx % 2 === 0 ? "#FFFDE7" : "#fff",
+                  transition: "background 0.2s",
+                  borderBottom: "1px solid #f3e6b3"
+                }}>
+                  <td style={{ padding: "12px 8px", textAlign: "center", color: "#888", fontWeight: "bold" }}>{idx + 1}</td>
+                  <td style={{ padding: "12px 8px", fontWeight: "bold", color: "#1976d2", textAlign: "center" }}>{plate}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={2} style={{ textAlign: "center", color: "#888", padding: 24 }}>
+                  No unrented cars found.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  // جدول السيارات المكررة
+  const RepeatedTable = (
+    <div>
+      <h2 style={{
+        color: "#673ab7",
+        fontWeight: "bold",
+        marginTop: 32,
+        fontSize: 28,
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        letterSpacing: 1
+      }}>
+        <span role="img" aria-label="car">🚗</span> Repeated Cars in Period
+      </h2>
+      <div style={{
+        background: "#fff",
+        borderRadius: 18,
+        boxShadow: "0 8px 32px #FFD60055",
+        padding: 0,
+        marginTop: 18,
+        overflow: "auto",
+        border: "2px solid #FFD600"
+      }}>
+        <table style={{
+          width: "100%",
+          borderCollapse: "separate",
+          borderSpacing: 0,
+          fontSize: 16,
+          minWidth: 700
+        }}>
+          <thead>
+            <tr style={{
+              background: "linear-gradient(90deg,#FFD600 60%,#fffbe7 100%)",
+              color: "#222",
+              fontWeight: "bold",
+              fontSize: 18,
+              boxShadow: "0 2px 8px #FFD60055"
+            }}>
+              <th style={{ padding: "16px 8px", borderTopLeftRadius: 18, borderBottom: "2px solid #FFD600", textAlign: "center" }}>#</th>
+              <th style={{ padding: "16px 8px", borderBottom: "2px solid #FFD600", textAlign: "center" }}>Plate No.</th>
+              <th style={{ padding: "16px 8px", borderBottom: "2px solid #FFD600", textAlign: "center" }}>Contracts Count</th>
+              <th style={{ padding: "16px 8px", borderTopRightRadius: 18, borderBottom: "2px solid #FFD600", textAlign: "center" }}>Contract Numbers</th>
+            </tr>
+          </thead>
+          <tbody>
+            {repeatedToShow.length > 0 ? (
+              repeatedToShow.map(([plate, rows], i) => (
+                <tr
+                  key={i}
+                  style={{
+                    background: i % 2 === 0 ? "#FFFDE7" : "#fff",
+                    transition: "background 0.2s",
+                    borderBottom: "1px solid #f3e6b3"
+                  }}
+                >
+                  <td style={{ padding: "12px 8px", textAlign: "center", color: "#888", fontWeight: "bold" }}>{i + 1}</td>
+                  <td style={{ padding: "12px 8px", fontWeight: "bold", color: "#1976d2", letterSpacing: 1, textAlign: "center" }}>{plate}</td>
+                  <td style={{ padding: "12px 8px", textAlign: "center", color: "#388e3c", fontWeight: "bold" }}>{rows.length}</td>
+                  <td style={{ padding: "12px 8px", textAlign: "center" }}>
+                    {rows.map((r: any, idx: number) => (
+                      <span
+                        key={idx}
+                        style={{
+                          display: "inline-block",
+                          margin: "0 6px 6px 0",
+                          background: "#FFD600",
+                          borderRadius: 8,
+                          padding: "6px 14px",
+                          color: "#222",
+                          fontWeight: "bold",
+                          fontSize: 15,
+                          cursor: "pointer",
+                          boxShadow: "0 2px 8px #FFD60044",
+                          border: "1.5px solid #673ab7",
+                          transition: "background 0.2s, color 0.2s"
+                        }}
+                        onClick={() => setSelectedContract(r)}
+                        title="Show contract details"
+                        onMouseOver={e => {
+                          (e.currentTarget as HTMLElement).style.background = "#673ab7";
+                          (e.currentTarget as HTMLElement).style.color = "#FFD600";
+                        }}
+                        onMouseOut={e => {
+                          (e.currentTarget as HTMLElement).style.background = "#FFD600";
+                          (e.currentTarget as HTMLElement).style.color = "#222";
+                        }}
+                      >
+                        {r['Contract No.']}
+                      </span>
+                    ))}
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={4} style={{ textAlign: "center", color: "#888", padding: 24 }}>
+                  No repeated cars found.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{
+      minHeight: "100vh",
+      background: "#FFF8E1",
+      fontFamily: "Tajawal, Arial, sans-serif"
+    }}>
+      <button
+        onClick={() => window.location.reload()}
+        style={{
+          margin: "32px 0 0 32px",
+          background: "#FFD600",
+          color: "#673ab7",
+          border: "2px solid #673ab7",
+          borderRadius: 8,
+          fontWeight: "bold",
+          fontSize: 18,
+          padding: "8px 24px",
+          cursor: "pointer",
+          boxShadow: "0 2px 8px #FFD60044"
+        }}
+      >← Back to YELO</button>
+
+      <div style={{
+        maxWidth: 900,
+        margin: "32px auto",
+        background: "#FFD600",
+        borderRadius: 18,
+        boxShadow: "0 4px 24px #FFD60055",
+        padding: 32,
+        textAlign: "center",
+        border: "3px solid #673ab7"
+      }}>
+        <h1 style={{ color: "#673ab7", fontWeight: "bold", fontSize: 38, margin: 0 }}>Invygo Contracts </h1>
+        <div style={{ color: "#222", fontSize: 18, marginTop: 8, marginBottom: 0 }}>
+          Search and view all contracts in one place
+        </div>
+      </div>
+
+      <div style={{
+        maxWidth: 1200,
+        margin: "32px auto",
+        background: "#fff",
+        borderRadius: 18,
+        boxShadow: "0 4px 24px #0001",
+        padding: 24,
+        minHeight: 600
+      }}>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 18 }}>
+          <input
+            type="text"
+            placeholder="🔍 Search..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{
+              border: "2px solid #FFD600",
+              borderRadius: 8,
+              padding: "8px 18px",
+              fontSize: 16,
+              width: 220
+            }}
+          />
+          <button
+            onClick={() => setSearch('')}
+            style={{
+              background: "#fff",
+              color: "#673ab7",
+              border: "2px solid #FFD600",
+              borderRadius: 8,
+              fontWeight: "bold",
+              fontSize: 16,
+              padding: "8px 18px",
+              cursor: "pointer"
+            }}>Reset</button>
+          <button
+            onClick={() => {
+              // Export to CSV
+              const csvRows = [
+                ["Contract No.", "Customer", "Plate No.", "Pick-up", "Drop-off"],
+                ...searched.map((c: any) => [
+                  c['Contract No.'],
+                  c['Customer'],
+                  c['Plate No.'],
+                  formatDate(c['Pick-up Date']),
+                  formatDate(c['Drop-off Date'])
+                ])
+              ];
+              const csvContent = "data:text/csv;charset=utf-8," + csvRows.map(e => e.join(",")).join("\n");
+              const link = document.createElement("a");
+              link.setAttribute("href", encodeURI(csvContent));
+              link.setAttribute("download", "contracts.csv");
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            }}
+            style={{
+              background: "#fff",
+              color: "#673ab7",
+              border: "2px solid #FFD600",
+              borderRadius: 8,
+              fontWeight: "bold",
+              fontSize: 16,
+              padding: "8px 18px",
+              cursor: "pointer"
+            }}>Export</button>
+          <button
+            onClick={() => window.print()}
+            style={{
+              background: "#fff",
+              color: "#673ab7",
+              border: "2px solid #FFD600",
+              borderRadius: 8,
+              fontWeight: "bold",
+              fontSize: 16,
+              padding: "8px 18px",
+              cursor: "pointer"
+            }}>Print</button>
+          <button
+            onClick={() => setView('contracts')}
+            style={{
+              background: view === 'contracts' ? "#FFD600" : "#fff",
+              color: view === 'contracts' ? "#222" : "#673ab7",
+              border: "2px solid #FFD600",
+              borderRadius: 8,
+              fontWeight: "bold",
+              fontSize: 16,
+              padding: "8px 18px",
+              cursor: "pointer"
+            }}>Contracts ({filtered.length})</button>
+          <button
+            onClick={() => setView('unrented')}
+            style={{
+              background: view === 'unrented' ? "#FFD600" : "#fff",
+              color: view === 'unrented' ? "#222" : "#673ab7",
+              border: "2px solid #FFD600",
+              borderRadius: 8,
+              fontWeight: "bold",
+              fontSize: 16,
+              padding: "8px 18px",
+              cursor: "pointer"
+            }}>Unrented Cars</button>
+          <button
+            onClick={() => setView('repeated')}
+            style={{
+              background: view === 'repeated' ? "#FFD600" : "#fff",
+              color: view === 'repeated' ? "#222" : "#673ab7",
+              border: "2px solid #FFD600",
+              borderRadius: 8,
+              fontWeight: "bold",
+              fontSize: 16,
+              padding: "8px 18px",
+              cursor: "pointer"
+            }}>Repeated Cars</button>
+        </div>
+        <div style={{ display: "flex", gap: 20, alignItems: "flex-end", marginBottom: 22, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <label style={{ marginBottom: 6, fontWeight: "bold", color: "#222", fontSize: 16 }}>
+              Contracts File
+            </label>
+            <input
+              type="file"
+              accept=".xlsx, .xls"
+              onChange={handleFileUpload}
+              style={{
+                marginBottom: 0,
+                padding: 7,
+                borderRadius: 8,
+                border: "1.2px solid #eee",
+                width: 180,
+                background: "#f8f8f8",
+                fontSize: 15
+              }}
+            />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <label style={{ marginBottom: 6, fontWeight: "bold", color: "#222", fontSize: 16 }}>
+              Invygo Cars File
+            </label>
+            <input
+              type="file"
+              accept=".xlsx, .xls"
+              onChange={handleInvygoUpload}
+              style={{
+                marginBottom: 0,
+                padding: 7,
+                borderRadius: 8,
+                border: "1.2px solid #eee",
+                width: 180,
+                background: "#f8f8f8",
+                fontSize: 15
+              }}
+            />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <label style={{ fontSize: 16, fontWeight: "bold", marginBottom: 4, textAlign: "center" }}>From</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={e => setStartDate(e.target.value)}
+              style={{
+                border: "2px solid #FFD600",
+                borderRadius: 8,
+                padding: "7px 10px",
+                fontSize: 15,
+                fontWeight: "bold",
+                width: 120,
+                textAlign: "center"
+              }}
+            />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <label style={{ fontSize: 16, fontWeight: "bold", marginBottom: 4, textAlign: "center" }}>To</label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={e => setEndDate(e.target.value)}
+              style={{
+                border: "2px solid #FFD600",
+                borderRadius: 8,
+                padding: "7px 10px",
+                fontSize: 15,
+                fontWeight: "bold",
+                width: 120,
+                textAlign: "center"
+              }}
+            />
+          </div>
+          <button
+            onClick={filterContracts}
+            style={{
+              background: "#FFD600",
+              color: "#222",
+              border: "none",
+              borderRadius: 8,
+              fontWeight: "bold",
+              fontSize: 16,
+              padding: "8px 20px",
+              marginRight: 4,
+              cursor: "pointer",
+              boxShadow: "0 2px 8px #FFD60044",
+              height: 40
+            }}
+          >
+            Show Contracts
+          </button>
+        </div>
+
+        {/* Always show all results for search */}
+        {search && (
+          <>
+            {ContractsTable}
+            {UnrentedTable}
+            {RepeatedTable}
+          </>
+        )}
+
+        {/* إذا لم يكن هناك بحث، اعرض الصفحة حسب view */}
+        {!search && (
+          <>
+            {view === 'contracts' && ContractsTable}
+            {view === 'unrented' && UnrentedTable}
+            {view === 'repeated' && RepeatedTable}
+          </>
+        )}
+
+        {selectedContract && (
+          <div style={{
+            position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh",
+            background: "#0008", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 50
+          }}>
+            <div ref={modalRef} style={{
+              background: "#fff", padding: 24, borderRadius: 18, boxShadow: "0 4px 24px #0003", maxWidth: 650, width: "100%", maxHeight: "80vh", overflowY: "auto"
+            }}>
+              <h3 style={{ color: "#673ab7", fontWeight: "bold", fontSize: 24, marginBottom: 18, textAlign: "center" }}>Contract Details</h3>
+              <div style={{
+                background: "#fff",
+                borderRadius: 18,
+                boxShadow: "0 8px 32px #FFD60055",
+                padding: 0,
+                marginTop: 0,
+                overflow: "auto",
+                border: "2px solid #FFD600"
+              }}>
+                <table style={{
+                  width: "100%",
+                  borderCollapse: "separate",
+                  borderSpacing: 0,
+                  fontSize: 16,
+                  minWidth: 400
+                }}>
+                  <thead>
+                    <tr style={{
+                      background: "linear-gradient(90deg,#FFD600 60%,#fffbe7 100%)",
+                      color: "#222",
+                      fontWeight: "bold",
+                      fontSize: 18,
+                      boxShadow: "0 2px 8px #FFD60055"
+                    }}>
+                      <th style={{ padding: "14px 8px", borderTopLeftRadius: 18, borderBottom: "2px solid #FFD600", textAlign: "center" }}>Field</th>
+                      <th style={{ padding: "14px 8px", borderTopRightRadius: 18, borderBottom: "2px solid #FFD600", textAlign: "center" }}>Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(selectedContract).map(([key, value], idx) => (
+                      <tr key={idx} style={{
+                        background: idx % 2 === 0 ? "#FFFDE7" : "#fff",
+                        transition: "background 0.2s",
+                        borderBottom: "1px solid #f3e6b3"
+                      }}>
+                        <td style={{
+                          padding: "12px 8px",
+                          fontWeight: "bold",
+                          color: "#673ab7",
+                          textAlign: "center",
+                          letterSpacing: 1
+                        }}>{key}</td>
+                        <td style={{
+                          padding: "12px 8px",
+                          color: key.includes('Date') ? "#388e3c" : "#1976d2",
+                          fontWeight: "bold",
+                          textAlign: "center"
+                        }}>
+                          {key.includes('Date') ? formatDate(value) : value?.toString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+
+      </div>
     </div>
   );
 }
