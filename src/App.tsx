@@ -40,6 +40,7 @@ export default function App() {
   const [unrentedPlates, setUnrentedPlates] = useState<string[]>([]);
   const [repeatedContracts, setRepeatedContracts] = useState<any[]>([]);
   const modalRef = useRef(null);
+  const [invygoSummary, setInvygoSummary] = useState({ invygoCount: 0, nonInvygoCount: 0 });
 
   useEffect(() => {
     const handleClickOutside = (e: any) => {
@@ -80,58 +81,96 @@ export default function App() {
       const jsonData = XLSX.utils.sheet_to_json(sheet).filter((row: any) =>
         Object.values(row).some(v => v !== null && v !== '')
       );
-      const plates = jsonData.map((row: any) => (row['Plate'] || '').toString().replace(/\s/g, '').trim());
-      setInvygoPlates(plates);
+      const plates = jsonData.map((row: any) =>
+  (row['Plate'] || '').toString().replace(/\s/g, '').trim().toUpperCase()
+);
+setInvygoPlates(plates);
+
     };
     reader.readAsArrayBuffer(file);
   };
 
   const filterContracts = () => {
-    if (!startDate || !endDate) return;
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+  if (!startDate || !endDate) return;
 
-    const result = contracts.filter((c: any) => {
-      const pickup = parseExcelDate(c['Pick-up Date']);
-      const dropoff = parseExcelDate(c['Drop-off Date']);
-      const plate = (c['Plate No.'] || c['Plate'] || '').toString().replace(/\s/g, '').trim();
-      return pickup && dropoff && pickup <= end && dropoff >= start && invygoPlates.includes(plate);
-    });
+  const start = new Date(startDate);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(endDate);
+  const today = new Date();
 
-    const rentedPlates = new Set(result.map((c: any) => (c['Plate No.'] || c['Plate'] || '').toString().replace(/\s/g, '').trim()));
-    const notRented = invygoPlates.filter(plate => !rentedPlates.has(plate));
+  const result = contracts.filter((c: any) => {
+    const pickup = parseExcelDate(c['Pick-up Date']);
+    const dropoff = parseExcelDate(c['Drop-off Date']);
+    const status = (c['Status'] || '').toString().toLowerCase().trim();
+    const isOpen = status === 'open';
 
-    const grouped: Record<string, any[]> = {};
-    result.forEach((c: any) => {
-      const plate = c['Plate No.'] || c['Plate'] || 'Unknown';
-      if (!grouped[plate]) grouped[plate] = [];
-      grouped[plate].push(c);
-    });
-    const repeated = Object.entries(grouped).filter(([_, arr]) => arr.length > 1);
-    setRepeatedContracts(repeated);
+    // لو العقد مفتوح، نعتبره ساري حتى اليوم الحالي
+    const effectiveDropoff = isOpen ? today : dropoff;
 
-    setFiltered(result);
-    setUnrentedPlates(notRented);
-  };
+    const plate = (c['Plate No.'] || c['Plate'] || '').toString().replace(/\s/g, '').trim().toUpperCase();
+    const isInvygo = invygoPlates.includes(plate);
+    c.invygoListed = isInvygo;
 
-  const searched = filtered.filter((c: any) => {
     return (
-      c['Plate No.']?.toString().toLowerCase().includes(search.toLowerCase()) ||
-      c['Contract No.']?.toString().toLowerCase().includes(search.toLowerCase()) ||
-      c['Customer']?.toString().toLowerCase().includes(search.toLowerCase())
+      pickup &&
+      effectiveDropoff &&
+      pickup <= end &&
+      effectiveDropoff >= start
     );
-  }).sort((a: any, b: any) => {
-    const dateA = parseExcelDate(a['Pick-up Date'])?.getTime() || 0;
-    const dateB = parseExcelDate(b['Pick-up Date'])?.getTime() || 0;
-    return dateA - dateB;
   });
 
-  const contractsToShow = searched;
-  const unrentedToShow = unrentedPlates.filter(plate =>
-    plate.toLowerCase().includes(search.toLowerCase())
+  // ✅ احصائيات Invygo وغير Invygo
+  const invygoCount = result.filter(c => c.invygoListed).length;
+  const nonInvygoCount = result.length - invygoCount;
+  setInvygoSummary({ invygoCount, nonInvygoCount });
+
+  // ✅ السيارات المؤجرة
+  const rentedPlates = new Set(result.map((c: any) =>
+    (c['Plate No.'] || c['Plate'] || '').toString().replace(/\s/g, '').trim().toUpperCase()
+  ));
+
+  // ✅ السيارات غير المؤجرة
+  const notRented = invygoPlates.filter(plate => !rentedPlates.has(plate));
+
+  // ✅ التكرارات
+  const grouped: Record<string, any[]> = {};
+  result.forEach((c: any) => {
+    const plate = (c['Plate No.'] || c['Plate'] || 'Unknown').toString().trim().toUpperCase();
+    if (!grouped[plate]) grouped[plate] = [];
+    grouped[plate].push(c);
+  });
+
+  const repeated = Object.entries(grouped).filter(([_, arr]) => arr.length > 1);
+
+  setRepeatedContracts(repeated);
+  setFiltered(result);
+  setUnrentedPlates(notRented);
+};
+
+
+
+const searched = filtered.filter((c: any) => {
+  return (
+    c['Plate No.']?.toString().toLowerCase().includes(search.toLowerCase()) ||
+    c['Contract No.']?.toString().toLowerCase().includes(search.toLowerCase()) ||
+    c['Customer']?.toString().toLowerCase().includes(search.toLowerCase())
   );
-  const repeatedToShow = repeatedContracts
-    .filter(([plate]) => plate.toLowerCase().includes(search.toLowerCase()));
+}).sort((a: any, b: any) => {
+  const dateA = parseExcelDate(a['Pick-up Date'])?.getTime() || 0;
+  const dateB = parseExcelDate(b['Pick-up Date'])?.getTime() || 0;
+  return dateA - dateB;
+});
+
+const contractsToShow = searched;
+
+const unrentedToShow = unrentedPlates.filter((plate: string) =>
+  plate.toLowerCase().includes(search.toLowerCase())
+);
+
+const repeatedToShow = repeatedContracts.filter(([plate]: [string]) =>
+  plate.toLowerCase().includes(search.toLowerCase())
+);
+
 
   // جدول العقود
   const ContractsTable = (
@@ -148,6 +187,20 @@ export default function App() {
       }}>
         <span role="img" aria-label="doc">📄</span> Contracts
       </h2>
+      <div style={{
+  margin: "32px 0 16px",
+  padding: "12px 24px",
+  background: "#fff8dc",
+  border: "2px dashed #FFD600",
+  borderRadius: 12,
+  fontWeight: "bold",
+  fontSize: 18,
+  color: "#5d1789",
+  display: "inline-block"
+}}>
+  ✅ Invygo Contracts: {invygoSummary.invygoCount} &nbsp; | &nbsp;
+  ❌ Other Contracts: {invygoSummary.nonInvygoCount}
+</div>
       <div style={{
         background: "#fff",
         borderRadius: 18,
@@ -184,10 +237,13 @@ export default function App() {
             {contractsToShow.length > 0 ? (
               contractsToShow.map((c: any, index) => (
                 <tr key={index} style={{
-                  background: index % 2 === 0 ? "#FFFDE7" : "#fff",
-                  transition: "background 0.2s",
-                  borderBottom: "1px solid #f3e6b3"
-                }}>
+  background: c.invygoListed
+    ? (index % 2 === 0 ? "#FFFDE7" : "#fff")  // ضمن اللوحات المعتمدة
+    : "#FBE9E7", // لون مميز للسيارات خارج القائمة
+  transition: "background 0.2s",
+  borderBottom: "1px solid #f3e6b3"
+}}>
+
                   <td style={{ padding: "12px 8px", textAlign: "center", color: "#888", fontWeight: "bold" }}>{index + 1}</td>
                   <td style={{
                     padding: "12px 8px",
@@ -280,7 +336,9 @@ export default function App() {
                   borderBottom: "1px solid #f3e6b3"
                 }}>
                   <td style={{ padding: "12px 8px", textAlign: "center", color: "#888", fontWeight: "bold" }}>{idx + 1}</td>
-                  <td style={{ padding: "12px 8px", fontWeight: "bold", color: "#1976d2", textAlign: "center" }}>{plate}</td>
+<td style={{ padding: "12px 8px", fontWeight: "bold", color: "#1976d2", textAlign: "center" }}>
+  {plate.replace(/^([a-zA-Z]+)(\d+)$/, '$1 $2')}
+</td>
                 </tr>
               ))
             ) : (
@@ -544,7 +602,7 @@ export default function App() {
               fontSize: 16,
               padding: "8px 18px",
               cursor: "pointer"
-            }}>Unrented Cars</button>
+            }}>Unrented Cars ({unrentedPlates.length})</button>
           <button
             onClick={() => setView('repeated')}
             style={{
@@ -556,7 +614,7 @@ export default function App() {
               fontSize: 16,
               padding: "8px 18px",
               cursor: "pointer"
-            }}>Repeated Cars</button>
+            }}>Repeated Cars ({repeatedContracts.length})</button>
         </div>
         <div style={{ display: "flex", gap: 20, alignItems: "flex-end", marginBottom: 22, flexWrap: "wrap" }}>
           <div style={{ display: "flex", flexDirection: "column" }}>
@@ -736,6 +794,16 @@ export default function App() {
             </div>
           </div>
         )}
+<div style={{
+  textAlign: "center",
+  marginTop: 40,
+  padding: 16,
+  fontSize: 14,
+  color: "#888",
+  borderTop: "1px solid #eee"
+}}>
+  © {new Date().getFullYear()} Mohamed Alamir. All rights reserved.
+</div>
 
       </div>
     </div>
