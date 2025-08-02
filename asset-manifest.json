@@ -1,0 +1,15 @@
+{
+  "files": {
+    "main.css": "/invygocontracts/static/css/main.e6c13ad2.css",
+    "main.js": "/invygocontracts/static/js/main.f8dbb26b.js",
+    "static/js/453.f304c643.chunk.js": "/invygocontracts/static/js/453.f304c643.chunk.js",
+    "index.html": "/invygocontracts/index.html",
+    "main.e6c13ad2.css.map": "/invygocontracts/static/css/main.e6c13ad2.css.map",
+    "main.f8dbb26b.js.map": "/invygocontracts/static/js/main.f8dbb26b.js.map",
+    "453.f304c643.chunk.js.map": "/invygocontracts/static/js/453.f304c643.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.e6c13ad2.css",
+    "static/js/main.f8dbb26b.js"
+  ]
+}
