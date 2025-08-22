@@ -5,8 +5,10 @@ import * as XLSX from 'xlsx';
 function parseExcelDate(value: any): Date | null {
   if (!value) return null;
   if (typeof value === 'number') {
-    return XLSX.SSF.parse_date_code(value, { date1904: false }) ?
-      new Date(Date.UTC(1899, 11, 30) + value * 86400000) : null;
+    // Use XLSX built-in date parsing which handles timezone correctly
+    const excelDate = XLSX.SSF.parse_date_code(value);
+
+    return excelDate ? new Date(excelDate.y, excelDate.m - 1, excelDate.d, excelDate.H || 0, excelDate.M || 0, excelDate.S || 0) : null;
   }
   if (typeof value === 'string') {
     // Check if string contains both date and time (DD/MM/YYYY HH:MM)
@@ -33,9 +35,9 @@ function formatDate(value: any): string {
   const date = parseExcelDate(value);
   if (!date) return value;
   // Format as DD/MM/YYYY
-  const day = String(date.getUTCDate()).padStart(2, '0');
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const year = date.getUTCFullYear();
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
   return `${day}/${month}/${year}`;
 }
 
@@ -70,6 +72,7 @@ export default function App() {
   const [parkingType, setParkingType] = useState<'invygo' | 'yelo'>('invygo');
   const [showParkingDialog, setShowParkingDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
+  const [parkingFilter, setParkingFilter] = useState<'all' | 'matched' | 'unmatched'>('all');
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -251,6 +254,8 @@ export default function App() {
         const plateNumber = (row['Plate_Number'] || '').toString().replace(/\s/g, '').trim().toUpperCase();
         const parkingDate = parseExcelDate(row['Date']);
         
+
+        
         if (plateNumber && parkingDate && contracts.length > 0) {
           const plateNoHeader = findHeader(['Plate No.', 'Plate']);
           const pickupHeader = findHeader(['Pick-up Date', 'Pickup Date']);
@@ -266,7 +271,7 @@ export default function App() {
               return contractPlate === plateNumber;
             });
             
-            const matchingContract = contractsToSearch.find((c: any) => {
+            const matchingContracts = contractsToSearch.filter((c: any) => {
               const contractPlate = (c[plateNoHeader] || '').toString().replace(/\s/g, '').trim().toUpperCase();
               const pickup = parseExcelDate(c[pickupHeader]);
               const dropoff = parseExcelDate(c[dropoffHeader]);
@@ -275,9 +280,10 @@ export default function App() {
               
               if (contractPlate !== plateNumber || !pickup) return false;
               
-              // Compare exact date and time
               const parkingTime = parkingDate.getTime();
               const pickupTime = pickup.getTime();
+              
+
               
               // If contract is open (based on Status column), check if parking time >= pickup time
               if (status === 'open' || status === 'active') {
@@ -290,10 +296,67 @@ export default function App() {
               return parkingTime >= pickupTime && parkingTime <= dropoffTime;
             });
             
+
+            
+            // If multiple matches, find the best match based on contract status and time
+            let matchingContract = null;
+            if (matchingContracts.length > 0) {
+              if (matchingContracts.length === 1) {
+                matchingContract = matchingContracts[0];
+              } else {
+                // Multiple contracts found - prioritize based on status and time
+                const parkingTime = parkingDate.getTime();
+                const statusHeader = findHeader(['Status']);
+                
+                // Separate open and closed contracts
+                const openContracts = matchingContracts.filter(c => {
+                  const status = statusHeader ? c[statusHeader]?.toString().toLowerCase() : '';
+                  return status === 'open' || status === 'active';
+                });
+                const closedContracts = matchingContracts.filter(c => {
+                  const status = statusHeader ? c[statusHeader]?.toString().toLowerCase() : '';
+                  return status !== 'open' && status !== 'active';
+                });
+                
+                // If there are open contracts, prefer the one with pickup closest to parking time
+                if (openContracts.length > 0) {
+                  matchingContract = openContracts.reduce((best, current) => {
+                    const bestPickup = parseExcelDate(best[pickupHeader])?.getTime() || 0;
+                    const currentPickup = parseExcelDate(current[pickupHeader])?.getTime() || 0;
+                    
+                    // Choose the pickup time closest to parking time
+                    const bestDiff = Math.abs(parkingTime - bestPickup);
+                    const currentDiff = Math.abs(parkingTime - currentPickup);
+                    return currentDiff < bestDiff ? current : best;
+                  });
+                } else {
+                  // Only closed contracts - choose the one that parking time falls within
+                  matchingContract = closedContracts.reduce((best, current) => {
+                    const bestPickup = parseExcelDate(best[pickupHeader])?.getTime() || 0;
+                    const currentPickup = parseExcelDate(current[pickupHeader])?.getTime() || 0;
+                    
+                    // If parking is after both pickups, choose the later one (most recent)
+                    if (parkingTime >= bestPickup && parkingTime >= currentPickup) {
+                      return currentPickup > bestPickup ? current : best;
+                    }
+                    
+                    // Otherwise, choose closest pickup time
+                    const bestDiff = Math.abs(parkingTime - bestPickup);
+                    const currentDiff = Math.abs(parkingTime - currentPickup);
+                    return currentDiff < bestDiff ? current : best;
+                  });
+                }
+              }
+            }
+            
+
+            
             if (matchingContract) {
               // Get contract number
               const contractNo = contractNoHeader ? matchingContract[contractNoHeader] : '';
               row.Contract = contractNo;
+              
+
               
               // Add contract start and end dates for display
               row.Contract_Start = matchingContract[pickupHeader];
@@ -336,6 +399,7 @@ export default function App() {
               }
             } else {
               // No matching contract found - set empty values
+
               row.Contract = '';
               row.Contract_Start = '';
               row.Contract_End = '';
@@ -349,6 +413,7 @@ export default function App() {
             }
           } else {
             // Headers not found - set empty values
+
             row.Contract = '';
             row.Contract_Start = '';
             row.Contract_End = '';
@@ -362,6 +427,7 @@ export default function App() {
           }
         } else {
           // No contracts loaded or invalid data - set empty values
+
           row.Contract = '';
           row.Contract_Start = '';
           row.Contract_End = '';
@@ -791,6 +857,41 @@ export default function App() {
         <span role="img" aria-label="parking">🅿️</span> {parkingType === 'invygo' ? 'Invygo' : 'YELO'} Parking Data
       </h2>
       <div style={{
+        margin: "16px 0",
+        padding: "12px 24px",
+        background: "#fff8dc",
+        border: "2px dashed #FFD600",
+        borderRadius: 12,
+        fontWeight: "bold",
+        fontSize: 18,
+        color: "#5d1789",
+        display: "inline-block"
+      }}>
+        ✅ Matched: <span 
+          onClick={() => setParkingFilter('matched')} 
+          style={{color: "#388e3c", cursor: 'pointer', textDecoration: 'underline'}}
+        >
+          {parkingData.filter((p: any) => {
+            const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+            const isCorrectType = parkingType === 'invygo' ? invygoPlates.includes(plateNumber) : !invygoPlates.includes(plateNumber);
+            return isCorrectType && p.Contract;
+          }).length}
+        </span> &nbsp; | &nbsp;
+        ❌ Unmatched: <span 
+          onClick={() => setParkingFilter('unmatched')} 
+          style={{color: "#f44336", cursor: 'pointer', textDecoration: 'underline'}}
+        >
+          {parkingData.filter((p: any) => {
+            const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+            const isCorrectType = parkingType === 'invygo' ? invygoPlates.includes(plateNumber) : !invygoPlates.includes(plateNumber);
+            return isCorrectType && !p.Contract;
+          }).length}
+        </span>
+        {parkingFilter !== 'all' && (
+          <span onClick={() => setParkingFilter('all')} style={{cursor: 'pointer', textDecoration: 'underline', marginLeft: '10px'}}> (Show All)</span>
+        )}
+      </div>
+      <div style={{
         background: "#fff",
         borderRadius: 18,
         boxShadow: "0 8px 32px #FFD60055",
@@ -855,6 +956,10 @@ export default function App() {
                   if (isInvygoCar) return false;
                 }
                 
+                // Apply parking filter
+                if (parkingFilter === 'matched' && !p.Contract) return false;
+                if (parkingFilter === 'unmatched' && p.Contract) return false;
+                
                 const plateMatch = p.Plate_Number?.toString().toLowerCase().includes(search.toLowerCase());
                 const contractMatch = p.Contract?.toString().toLowerCase().includes(search.toLowerCase());
                 return plateMatch || contractMatch || !search;
@@ -865,7 +970,22 @@ export default function App() {
                   borderBottom: "1px solid #f3e6b3"
                 }}>
                   <td style={{ padding: "8px 4px", textAlign: "center", color: "#888", fontWeight: "bold", fontSize: 12 }}>{index + 1}</td>
-                  <td style={{ padding: "8px 4px", textAlign: "center", fontWeight: "bold", color: "#1976d2", fontSize: 12 }}>{p.Plate_Number}</td>
+                  <td 
+                    onClick={() => copyToClipboard(p.Plate_Number)}
+                    style={{ 
+                      padding: "8px 4px", 
+                      textAlign: "center", 
+                      fontWeight: "bold", 
+                      color: "#1976d2", 
+                      fontSize: 12,
+                      cursor: "pointer",
+                      borderRadius: 4,
+                      transition: "background 0.2s"
+                    }}
+                    title="Click to copy plate number"
+                    onMouseOver={e => (e.currentTarget as HTMLElement).style.background = "#e3f2fd"}
+                    onMouseOut={e => (e.currentTarget as HTMLElement).style.background = ""}
+                  >{p.Plate_Number}</td>
                   <td style={{ padding: "8px 4px", textAlign: "center", fontSize: 12 }}>
                     <div style={{ fontWeight: "bold", marginBottom: 2 }}>{formatDate(p.Date)}</div>
                     <div style={{ fontSize: 12, color: "#333" }}>
@@ -914,7 +1034,9 @@ export default function App() {
             ) : (
               <tr>
                 <td colSpan={parkingType === 'invygo' ? 13 : 14} style={{ textAlign: "center", color: "#888", padding: 24 }}>
-                  No parking data found.
+                  {parkingFilter === 'matched' ? 'No matched parking data found.' : 
+                   parkingFilter === 'unmatched' ? 'No unmatched parking data found.' : 
+                   'No parking data found.'}
                 </td>
               </tr>
             )}
