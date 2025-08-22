@@ -9,13 +9,20 @@ function parseExcelDate(value: any): Date | null {
       new Date(Date.UTC(1899, 11, 30) + value * 86400000) : null;
   }
   if (typeof value === 'string') {
-    const parts = value.split(/[\/\-]/);
-    if (parts.length === 3) {
-      const [day, month, year] = parts.map(p => parseInt(p));
-      if (year > 1900 && month <= 12 && day <= 31) {
-        return new Date(Date.UTC(year, month - 1, day));
-      }
+    // Check if string contains both date and time (DD/MM/YYYY HH:MM)
+    const dateTimeMatch = value.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})/);
+    if (dateTimeMatch) {
+      const [, day, month, year, hour, minute] = dateTimeMatch;
+      return new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute));
     }
+    
+    // Check if string contains only date (DD/MM/YYYY)
+    const dateMatch = value.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (dateMatch) {
+      const [, day, month, year] = dateMatch;
+      return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    }
+    
     const parsed = new Date(value);
     return isNaN(parsed.getTime()) ? null : parsed;
   }
@@ -25,8 +32,20 @@ function parseExcelDate(value: any): Date | null {
 function formatDate(value: any): string {
   const date = parseExcelDate(value);
   if (!date) return value;
-  // Use UTC date parts for formatting to avoid timezone shift
-  return new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()).toLocaleDateString('en-GB');
+  // Format as DD/MM/YYYY
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const year = date.getUTCFullYear();
+  return `${day}/${month}/${year}`;
+}
+
+function formatDateTime(value: any): string {
+  const date = parseExcelDate(value);
+  if (!date) return value;
+  // Format date and time
+  const dateStr = date.toLocaleDateString('en-GB');
+  const timeStr = date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+  return `${dateStr} ${timeStr}`;
 }
 
 export default function App() {
@@ -46,6 +65,117 @@ export default function App() {
   const [repeatedContracts, setRepeatedContracts] = useState<any[]>([]);
   const modalRef = useRef(null);
   const [invygoSummary, setInvygoSummary] = useState({ invygoCount: 0, nonInvygoCount: 0 });
+  const [showCopyDialog, setShowCopyDialog] = useState(false);
+  const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
+  const [parkingType, setParkingType] = useState<'invygo' | 'yelo'>('invygo');
+  const [showParkingDialog, setShowParkingDialog] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      // Optional: Show a brief visual feedback
+    }).catch(() => {
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+    });
+  };
+
+  const copySelectedColumns = () => {
+    let data: any[] = [];
+    let columnMap: { [key: string]: string } = {};
+    
+    if (view === 'contracts') {
+      data = contractsToShow;
+      columnMap = {
+        'Contract No.': contractNoHeader || '',
+        'Customer': customerHeader || '',
+        'Plate No.': plateNoHeader || '',
+        'Pick-up': pickupHeader || '',
+        'Drop-off': dropoffHeader || ''
+      };
+    } else if (view === 'parking') {
+      data = parkingData.filter((p: any) => {
+        const plateMatch = p.Plate_Number?.toString().toLowerCase().includes(search.toLowerCase());
+        const contractMatch = p.Contract?.toString().toLowerCase().includes(search.toLowerCase());
+        return plateMatch || contractMatch || !search;
+      });
+      if (parkingType === 'invygo') {
+        columnMap = {
+          'Plate Number': 'Plate_Number',
+          'Date': 'Date',
+          'Time': 'Time',
+          'Amount': 'Amount',
+          'Description': 'Description',
+          'Dealer Booking': 'Dealer_Booking_Number',
+          'Customer Name': 'Customer_Name',
+          'Tax Invoice': 'Tax_Invoice_No',
+          'Contract': 'Contract',
+          'Contract Start': 'Contract_Start',
+          'Contract End': 'Contract_End'
+        };
+      } else {
+        columnMap = {
+          'Plate Number': 'Plate_Number',
+          'Date': 'Date',
+          'Time': 'Time',
+          'Amount': 'Amount',
+          'Description': 'Description',
+          'Booking Number': 'Booking_Number',
+          'Customer': 'Customer_Contract',
+          'Pick-up Branch': 'Pickup_Branch',
+          'Model': 'Model_Contract',
+          'Tax Invoice': 'Tax_Invoice_No',
+          'Contract': 'Contract',
+          'Contract Start': 'Contract_Start',
+          'Contract End': 'Contract_End'
+        };
+      }
+    } else if (view === 'unrented') {
+      data = unrentedToShow.map(plate => ({ plate }));
+      columnMap = { 'Plate No.': 'plate' };
+    } else if (view === 'repeated') {
+      data = repeatedToShow.map(([plate, rows]) => ({ plate, count: rows.length }));
+      columnMap = { 'Plate No.': 'plate', 'Contracts Count': 'count' };
+    }
+
+    const result = selectedColumns.map(columnName => {
+      const fieldName = columnMap[columnName];
+      const columnData = data.map(item => {
+        let value = item[fieldName] || '';
+        if (columnName.includes('Date') && value) {
+          value = formatDate(value);
+        }
+        return value;
+      });
+      return `${columnName}:\n${columnData.join('\n')}`;
+    }).join('\n\n');
+
+    copyToClipboard(result);
+    setShowCopyDialog(false);
+    setSelectedColumns([]);
+  };
+
+  const getAvailableColumns = () => {
+    if (view === 'contracts') {
+      return ['Contract No.', 'Customer', 'Plate No.', 'Pick-up', 'Drop-off'];
+    } else if (view === 'parking') {
+      if (parkingType === 'invygo') {
+        return ['Plate Number', 'Date', 'Time', 'Amount', 'Description', 'Dealer Booking', 'Customer Name', 'Tax Invoice', 'Contract', 'Contract Start', 'Contract End'];
+      } else {
+        return ['Plate Number', 'Date', 'Time', 'Amount', 'Description', 'Booking Number', 'Customer', 'Pick-up Branch', 'Model', 'Tax Invoice', 'Contract', 'Contract Start', 'Contract End'];
+      }
+    } else if (view === 'unrented') {
+      return ['Plate No.'];
+    } else if (view === 'repeated') {
+      return ['Plate No.', 'Contracts Count'];
+    }
+    return [];
+  };
 
   useEffect(() => {
     const handleClickOutside = (e: any) => {
@@ -121,17 +251,22 @@ export default function App() {
         const plateNumber = (row['Plate_Number'] || '').toString().replace(/\s/g, '').trim().toUpperCase();
         const parkingDate = parseExcelDate(row['Date']);
         
-        if (plateNumber && parkingDate) {
+        if (plateNumber && parkingDate && contracts.length > 0) {
           const plateNoHeader = findHeader(['Plate No.', 'Plate']);
           const pickupHeader = findHeader(['Pick-up Date', 'Pickup Date']);
           const dropoffHeader = findHeader(['Drop-off Date', 'Dropoff Date', 'Drop off Date']);
           const contractNoHeader = findHeader(['Contract No.']);
           
           if (plateNoHeader && pickupHeader && dropoffHeader && contractNoHeader) {
-            // Only search in filtered Invygo contracts
-            const invygoContracts = filtered.filter((c: any) => c.invygoListed);
+            // For YELO cars, always search in ALL contracts
+            // For Invygo cars, search in filtered contracts if available, otherwise all contracts
+            const contractsToSearch = contracts.filter((c: any) => {
+              const contractPlateValue = plateNoHeader ? (c[plateNoHeader] || '') : '';
+              const contractPlate = contractPlateValue.toString().replace(/\s/g, '').trim().toUpperCase();
+              return contractPlate === plateNumber;
+            });
             
-            const matchingContract = invygoContracts.find((c: any) => {
+            const matchingContract = contractsToSearch.find((c: any) => {
               const contractPlate = (c[plateNoHeader] || '').toString().replace(/\s/g, '').trim().toUpperCase();
               const pickup = parseExcelDate(c[pickupHeader]);
               const dropoff = parseExcelDate(c[dropoffHeader]);
@@ -140,18 +275,24 @@ export default function App() {
               
               if (contractPlate !== plateNumber || !pickup) return false;
               
-              // If contract is open (based on Status column), check if parking date >= pickup
+              // Compare exact date and time
+              const parkingTime = parkingDate.getTime();
+              const pickupTime = pickup.getTime();
+              
+              // If contract is open (based on Status column), check if parking time >= pickup time
               if (status === 'open' || status === 'active') {
-                  return parkingDate >= pickup;
+                  return parkingTime >= pickupTime;
               }
               
-              // Closed contract: check if parking date is within contract period
+              // Closed contract: check if parking time is within contract period (exact time comparison)
               if (!dropoff) return false;
-              return parkingDate >= pickup && parkingDate <= dropoff;
+              const dropoffTime = dropoff.getTime();
+              return parkingTime >= pickupTime && parkingTime <= dropoffTime;
             });
             
             if (matchingContract) {
-              const contractNo = matchingContract[contractNoHeader];
+              // Get contract number
+              const contractNo = contractNoHeader ? matchingContract[contractNoHeader] : '';
               row.Contract = contractNo;
               
               // Add contract start and end dates for display
@@ -165,20 +306,72 @@ export default function App() {
                 row.Contract_End = matchingContract[dropoffHeader];
               }
               
-              // Find matching dealer booking
-              const dealerBooking = dealerBookings.find((booking: any) => 
-                booking['Agreement']?.toString() === contractNo?.toString()
-              );
-              
-              if (dealerBooking) {
-                row.Dealer_Booking_Number = dealerBooking['Booking ID'];
+              // For Invygo cars, get dealer booking data
+              if (invygoPlates.includes(plateNumber)) {
+                const dealerBooking = dealerBookings.find((booking: any) => 
+                  booking['Agreement']?.toString() === contractNo?.toString()
+                );
+                
+                if (dealerBooking) {
+                  row.Dealer_Booking_Number = dealerBooking['Booking ID'];
+                  row.Customer_Name = dealerBooking['Customer'] || dealerBooking['Customer Name'] || '';
+                  
+                  // Build Model from Brand Name, Car Name, and Car Year
+                  const brandName = dealerBooking['Brand Name'] || '';
+                  const carName = dealerBooking['Car Name'] || '';
+                  const carYear = dealerBooking['Car Year'] || '';
+                  row.Model = [brandName, carName, carYear].filter(part => part).join(' ');
+                }
+              } else {
+                // For YELO cars, get contract data directly
+                const bookingNumberHeader = findHeader(['Booking Number', 'Booking No', 'Booking ID']);
+                const customerHeaderContract = findHeader(['Customer', 'Customer Name']);
+                const pickupBranchHeader = findHeader(['Pick-up Branch', 'Pickup Branch', 'Branch']);
+                const modelHeaderContract = findHeader(['Model', 'Car Model', 'Vehicle Model']);
+                
+                row.Booking_Number = bookingNumberHeader ? (matchingContract[bookingNumberHeader] || '') : '';
+                row.Customer_Contract = customerHeaderContract ? (matchingContract[customerHeaderContract] || '') : '';
+                row.Pickup_Branch = pickupBranchHeader ? (matchingContract[pickupBranchHeader] || '') : '';
+                row.Model_Contract = modelHeaderContract ? (matchingContract[modelHeaderContract] || '') : '';
               }
             } else {
               // No matching contract found - set empty values
+              row.Contract = '';
               row.Contract_Start = '';
               row.Contract_End = '';
+              row.Booking_Number = '';
+              row.Customer_Contract = '';
+              row.Pickup_Branch = '';
+              row.Model_Contract = '';
+              row.Dealer_Booking_Number = '';
+              row.Customer_Name = '';
+              row.Model = '';
             }
+          } else {
+            // Headers not found - set empty values
+            row.Contract = '';
+            row.Contract_Start = '';
+            row.Contract_End = '';
+            row.Booking_Number = '';
+            row.Customer_Contract = '';
+            row.Pickup_Branch = '';
+            row.Model_Contract = '';
+            row.Dealer_Booking_Number = '';
+            row.Customer_Name = '';
+            row.Model = '';
           }
+        } else {
+          // No contracts loaded or invalid data - set empty values
+          row.Contract = '';
+          row.Contract_Start = '';
+          row.Contract_End = '';
+          row.Booking_Number = '';
+          row.Customer_Contract = '';
+          row.Pickup_Branch = '';
+          row.Model_Contract = '';
+          row.Dealer_Booking_Number = '';
+          row.Customer_Name = '';
+          row.Model = '';
         }
         
         return row;
@@ -595,7 +788,7 @@ export default function App() {
         gap: 8,
         letterSpacing: 1
       }}>
-        <span role="img" aria-label="parking">🅿️</span> Parking Data
+        <span role="img" aria-label="parking">🅿️</span> {parkingType === 'invygo' ? 'Invygo' : 'YELO'} Parking Data
       </h2>
       <div style={{
         background: "#fff",
@@ -627,9 +820,22 @@ export default function App() {
               <th style={{ padding: "10px 4px", borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Time</th>
               <th style={{ padding: "10px 4px", borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Amount</th>
               <th style={{ padding: "10px 4px", borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Description</th>
-              <th style={{ padding: "10px 4px", borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Dealer Booking</th>
               <th style={{ padding: "10px 4px", borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Tax Invoice</th>
               <th style={{ padding: "10px 4px", borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Contract</th>
+              {parkingType === 'invygo' ? (
+                <>
+                  <th style={{ padding: "10px 4px", borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Dealer Booking</th>
+                  <th style={{ padding: "10px 4px", borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Customer Name</th>
+                  <th style={{ padding: "10px 4px", borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Model</th>
+                </>
+              ) : (
+                <>
+                  <th style={{ padding: "10px 4px", borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Booking Number</th>
+                  <th style={{ padding: "10px 4px", borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Customer</th>
+                  <th style={{ padding: "10px 4px", borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Pick-up Branch</th>
+                  <th style={{ padding: "10px 4px", borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Model</th>
+                </>
+              )}
               <th style={{ padding: "10px 4px", borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Contract Start</th>
               <th style={{ padding: "10px 4px", borderTopRightRadius: 18, borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Contract End</th>
             </tr>
@@ -637,6 +843,18 @@ export default function App() {
           <tbody>
             {parkingData.length > 0 ? (
               parkingData.filter((p: any) => {
+                const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+                
+                if (parkingType === 'invygo') {
+                  // Show only Invygo cars
+                  const isInvygoCar = invygoPlates.includes(plateNumber);
+                  if (!isInvygoCar) return false;
+                } else {
+                  // Show only YELO cars (not in Invygo)
+                  const isInvygoCar = invygoPlates.includes(plateNumber);
+                  if (isInvygoCar) return false;
+                }
+                
                 const plateMatch = p.Plate_Number?.toString().toLowerCase().includes(search.toLowerCase());
                 const contractMatch = p.Contract?.toString().toLowerCase().includes(search.toLowerCase());
                 return plateMatch || contractMatch || !search;
@@ -648,11 +866,15 @@ export default function App() {
                 }}>
                   <td style={{ padding: "8px 4px", textAlign: "center", color: "#888", fontWeight: "bold", fontSize: 12 }}>{index + 1}</td>
                   <td style={{ padding: "8px 4px", textAlign: "center", fontWeight: "bold", color: "#1976d2", fontSize: 12 }}>{p.Plate_Number}</td>
-                  <td style={{ padding: "8px 4px", textAlign: "center", fontSize: 12 }}>{formatDate(p.Date)}</td>
-                  <td style={{ padding: "8px 4px", textAlign: "center", fontSize: 12 }}>{p.Time}</td>
+                  <td style={{ padding: "8px 4px", textAlign: "center", fontSize: 12 }}>
+                    <div style={{ fontWeight: "bold", marginBottom: 2 }}>{formatDate(p.Date)}</div>
+                    <div style={{ fontSize: 12, color: "#333" }}>
+                      {p.Time_In && p.Time_Out ? `${p.Time_In} - ${p.Time_Out}` : ''}
+                    </div>
+                  </td>
+                  <td style={{ padding: "8px 4px", textAlign: "center", fontWeight: "bold", color: "#ff5722", fontSize: 12 }}>{p.Time || ''}</td>
                   <td style={{ padding: "8px 4px", textAlign: "center", fontWeight: "bold", color: "#388e3c", fontSize: 12 }}>{p.Amount}</td>
                   <td style={{ padding: "8px 4px", textAlign: "center", fontSize: 12 }}>{p.Description}</td>
-                  <td style={{ padding: "8px 4px", textAlign: "center", fontSize: 12 }}>{p.Dealer_Booking_Number}</td>
                   <td style={{ padding: "8px 4px", textAlign: "center", fontSize: 12 }}>{p.Tax_Invoice_No}</td>
                   <td style={{ 
                     padding: "8px 4px", 
@@ -660,9 +882,23 @@ export default function App() {
                     fontWeight: "bold",
                     color: p.Contract ? "#1976d2" : "#f44336",
                     fontSize: 12
-                  }}>{p.Contract || 'Switch'}</td>
+                  }}>{p.Contract || p.Contract_No || 'Switch'}</td>
+                  {parkingType === 'invygo' ? (
+                    <>
+                      <td style={{ padding: "8px 4px", textAlign: "center", fontSize: 12 }}>{p.Dealer_Booking_Number}</td>
+                      <td style={{ padding: "8px 4px", textAlign: "center", fontSize: 12, fontWeight: "bold", color: "#673ab7" }}>{p.Customer_Name}</td>
+                      <td style={{ padding: "8px 4px", textAlign: "center", fontSize: 12 }}>{p.Model}</td>
+                    </>
+                  ) : (
+                    <>
+                      <td style={{ padding: "8px 4px", textAlign: "center", fontSize: 12 }}>{p.Booking_Number}</td>
+                      <td style={{ padding: "8px 4px", textAlign: "center", fontSize: 12, fontWeight: "bold", color: "#673ab7" }}>{p.Customer_Contract}</td>
+                      <td style={{ padding: "8px 4px", textAlign: "center", fontSize: 12 }}>{p.Pickup_Branch}</td>
+                      <td style={{ padding: "8px 4px", textAlign: "center", fontSize: 12 }}>{p.Model_Contract}</td>
+                    </>
+                  )}
                   <td style={{ padding: "8px 4px", textAlign: "center", color: "#388e3c", fontSize: 12 }}>
-                    {p.Contract_Start ? formatDate(p.Contract_Start) : ''}
+                    {p.Contract_Start ? formatDateTime(p.Contract_Start) : ''}
                   </td>
                   <td style={{ 
                     padding: "8px 4px", 
@@ -671,13 +907,13 @@ export default function App() {
                     fontWeight: p.Contract_End === 'Open' ? "bold" : "normal",
                     fontSize: 12
                   }}>
-                    {p.Contract_End === 'Open' ? 'Open' : (p.Contract_End ? formatDate(p.Contract_End) : '')}
+                    {p.Contract_End === 'Open' ? 'Open' : (p.Contract_End ? formatDateTime(p.Contract_End) : '')}
                   </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={11} style={{ textAlign: "center", color: "#888", padding: 24 }}>
+                <td colSpan={parkingType === 'invygo' ? 13 : 14} style={{ textAlign: "center", color: "#888", padding: 24 }}>
                   No parking data found.
                 </td>
               </tr>
@@ -877,79 +1113,7 @@ export default function App() {
               cursor: "pointer"
             }}>Reset</button>
           <button
-                        onClick={() => {
-              if (view === 'parking' && parkingData.length > 0) {
-                // Export parking data with all original columns plus filled Contract and Dealer_Booking_Number
-                const parkingToShow = parkingData.filter((p: any) => {
-                  const plateMatch = p.Plate_Number?.toString().toLowerCase().includes(search.toLowerCase());
-                  const contractMatch = p.Contract?.toString().toLowerCase().includes(search.toLowerCase());
-                  return plateMatch || contractMatch || !search;
-                });
-                
-                const headers = ['Plate_Number', 'Date', 'Time', 'Amount', 'Description', 'Dealer_Booking_Number', 'Tax_Invoice_No', 'Contract'];
-                const headerRowString = headers.join(',');
-                
-                const dataRowsStrings = parkingToShow.map((p: any) => [
-                  p.Plate_Number || '',
-                  p.Date || '',
-                  p.Time || '',
-                  p.Amount || '',
-                  p.Description || '',
-                  p.Dealer_Booking_Number || '',
-                  p.Tax_Invoice_No || '',
-                  p.Contract || 'Switch'
-                ].join(','));
-                
-                const csvRows = [headerRowString, ...dataRowsStrings];
-                const csvContent = "data:text/csv;charset=utf-8," + csvRows.join("\n");
-                const link = document.createElement("a");
-                link.setAttribute("href", encodeURI(csvContent));
-                link.setAttribute("download", `Parking_Data_${startDate}_to_${endDate}.csv`);
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-              } else {
-                // Original export logic for other views
-                const headerRowString = [contractNoHeader, customerHeader, plateNoHeader, pickupHeader, dropoffHeader].filter(h => h).join(",");
-                const dataRowsStrings = contractsToShow.map((c: any) => [
-                  contractNoHeader ? c[contractNoHeader] : '',
-                  customerHeader ? c[customerHeader] : '',
-                  plateNoHeader ? c[plateNoHeader] : '',
-                  pickupHeader ? formatDate(c[pickupHeader]) : '',
-                  dropoffHeader ? formatDate(c[dropoffHeader]) : ''
-                ].join(','));
-
-                const csvRows = [headerRowString, ...dataRowsStrings];
-
-                const csvContent = "data:text/csv;charset=utf-8," + csvRows.join("\n");
-                const link = document.createElement("a");
-                link.setAttribute("href", encodeURI(csvContent));
-
-                let prefix = '';
-                if (view === 'contracts') {
-                  if (invygoFilter === 'invygo') {
-                    prefix = 'Invygo_Contracts';
-                  } else if (invygoFilter === 'other') {
-                    prefix = 'Other_Contracts';
-                  } else {
-                    prefix = 'All_Contracts';
-                  }
-                } else if (view === 'unrented') {
-                  prefix = 'Unrented_Cars';
-                }
-                else if (view === 'repeated') {
-                  prefix = 'Repeated_Cars';
-                }
-
-                const dateRange = `${startDate}_to_${endDate}`;
-                const filename = `${prefix}_${dateRange}.csv`;
-                
-                link.setAttribute("download", filename);
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-              }
-            }}
+            onClick={() => setShowExportDialog(true)}
             style={{
               background: "#fff",
               color: "#673ab7",
@@ -972,6 +1136,18 @@ export default function App() {
               padding: "8px 18px",
               cursor: "pointer"
             }}>Print</button>
+          <button
+            onClick={() => setShowCopyDialog(true)}
+            style={{
+              background: "#fff",
+              color: "#673ab7",
+              border: "2px solid #FFD600",
+              borderRadius: 8,
+              fontWeight: "bold",
+              fontSize: 16,
+              padding: "8px 18px",
+              cursor: "pointer"
+            }}>Copy</button>
           <button
             onClick={() => setView('contracts')}
             style={{
@@ -1009,7 +1185,7 @@ export default function App() {
               cursor: "pointer"
             }}>Repeated Cars ({repeatedContracts.length})</button>
           <button
-            onClick={() => setView('parking')}
+            onClick={() => setShowParkingDialog(true)}
             style={{
               background: view === 'parking' ? "#FFD600" : "#fff",
               color: view === 'parking' ? "#222" : "#673ab7",
@@ -1087,17 +1263,14 @@ export default function App() {
               type="file"
               accept=".xlsx, .xls, .csv"
               onChange={handleParkingUpload}
-              disabled={filtered.length === 0}
-              title={filtered.length === 0 ? "Please filter contracts first" : ""}
               style={{
                 marginBottom: 0,
                 padding: 7,
                 borderRadius: 8,
                 border: "1.2px solid #eee",
                 width: 180,
-                background: filtered.length === 0 ? "#f0f0f0" : "#f8f8f8",
-                fontSize: 15,
-                cursor: filtered.length === 0 ? "not-allowed" : "pointer"
+                background: "#f8f8f8",
+                fontSize: 15
               }}
             />
           </div>
@@ -1157,10 +1330,10 @@ export default function App() {
 
         {search && (
           <>
-            {ContractsTable}
-            {UnrentedTable}
-            {RepeatedTable}
-            {ParkingTable}
+            {view === 'contracts' && ContractsTable}
+            {view === 'unrented' && UnrentedTable}
+            {view === 'repeated' && RepeatedTable}
+            {view === 'parking' && ParkingTable}
           </>
         )}
 
@@ -1171,6 +1344,304 @@ export default function App() {
             {view === 'repeated' && RepeatedTable}
             {view === 'parking' && ParkingTable}
           </>
+        )}
+
+        {showParkingDialog && (
+          <div style={{
+            position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh",
+            background: "#0008", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 50
+          }}>
+            <div style={{
+              background: "#fff", padding: 24, borderRadius: 18, boxShadow: "0 4px 24px #0003", maxWidth: 400, width: "100%"
+            }}>
+              <h3 style={{ color: "#673ab7", fontWeight: "bold", fontSize: 24, marginBottom: 18, textAlign: "center" }}>Select Parking Type</h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <button
+                  onClick={() => {
+                    setParkingType('invygo');
+                    setView('parking');
+                    setShowParkingDialog(false);
+                  }}
+                  style={{
+                    background: "#FFD600",
+                    color: "#222",
+                    border: "2px solid #673ab7",
+                    borderRadius: 8,
+                    fontWeight: "bold",
+                    fontSize: 18,
+                    padding: "12px 20px",
+                    cursor: "pointer"
+                  }}
+                >
+                  🚗 Invygo Parking ({parkingData.filter((p: any) => {
+                    const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+                    return invygoPlates.includes(plateNumber);
+                  }).length})
+                </button>
+                <button
+                  onClick={() => {
+                    setParkingType('yelo');
+                    setView('parking');
+                    setShowParkingDialog(false);
+                  }}
+                  style={{
+                    background: "#FFD600",
+                    color: "#222",
+                    border: "2px solid #673ab7",
+                    borderRadius: 8,
+                    fontWeight: "bold",
+                    fontSize: 18,
+                    padding: "12px 20px",
+                    cursor: "pointer"
+                  }}
+                >
+                  🅿️ YELO Parking ({parkingData.filter((p: any) => {
+                    const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+                    return !invygoPlates.includes(plateNumber);
+                  }).length})
+                </button>
+                <button
+                  onClick={() => setShowParkingDialog(false)}
+                  style={{
+                    background: "#fff",
+                    color: "#673ab7",
+                    border: "2px solid #FFD600",
+                    borderRadius: 8,
+                    fontWeight: "bold",
+                    fontSize: 16,
+                    padding: "10px 20px",
+                    cursor: "pointer"
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showExportDialog && (
+          <div style={{
+            position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh",
+            background: "#0008", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 50
+          }}>
+            <div style={{
+              background: "#fff", padding: 24, borderRadius: 18, boxShadow: "0 4px 24px #0003", maxWidth: 400, width: "100%"
+            }}>
+              <h3 style={{ color: "#673ab7", fontWeight: "bold", fontSize: 24, marginBottom: 18, textAlign: "center" }}>Select Export Format</h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {view === 'parking' && parkingData.length > 0 ? (
+                  parkingType === 'invygo' ? (
+                    <>
+                      <button
+                        onClick={() => {
+                          const parkingToShow = parkingData.filter((p: any) => {
+                            const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+                            return invygoPlates.includes(plateNumber);
+                          });
+                          
+                          const headers = ['Plate_Number', 'Date', 'Time', 'Amount', 'Description', 'Dealer_Booking_Number', 'Tax_Invoice_No'];
+                          const dataRowsStrings = parkingToShow.map((p: any) => [
+                            p.Plate_Number || '', p.Date || '', p.Time || '', p.Amount || '',
+                            p.Description || '', p.Dealer_Booking_Number || '', p.Tax_Invoice_No || ''
+                          ].join(','));
+                          
+                          const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...dataRowsStrings].join("\n");
+                          const link = document.createElement("a");
+                          link.setAttribute("href", encodeURI(csvContent));
+                          link.setAttribute("download", `invygo_parking-charges-format_${startDate}_to_${endDate}.csv`);
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                          setShowExportDialog(false);
+                        }}
+                        style={{
+                          background: "#FFD600", color: "#222", border: "2px solid #673ab7",
+                          borderRadius: 8, fontWeight: "bold", fontSize: 18, padding: "12px 20px", cursor: "pointer"
+                        }}
+                      >
+                        📊 Parking Charges Format
+                      </button>
+                      <button
+                        onClick={() => {
+                          const parkingToShow = parkingData.filter((p: any) => {
+                            const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+                            return invygoPlates.includes(plateNumber);
+                          });
+                          
+                          const headers = ['Contract', 'Dealer_Booking_Number', 'Model', 'Plate_Number', 'Date', 'Time', 'Time_In', 'Time_Out', 'Amount', 'Customer Name', 'Tax_Invoice_No'];
+                          const dataRowsStrings = parkingToShow.map((p: any) => [
+                            p.Contract || '', p.Dealer_Booking_Number || '', p.Model || '', p.Plate_Number || '',
+                            p.Date || '', p.Time || '', p.Time_In || '', p.Time_Out || '',
+                            p.Amount || '', p.Customer_Name || '', p.Tax_Invoice_No || ''
+                          ].join(','));
+                          
+                          const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...dataRowsStrings].join("\n");
+                          const link = document.createElement("a");
+                          link.setAttribute("href", encodeURI(csvContent));
+                          link.setAttribute("download", `invygo_Parking_Word_${startDate}_to_${endDate}.csv`);
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                          setShowExportDialog(false);
+                        }}
+                        style={{
+                          background: "#FFD600", color: "#222", border: "2px solid #673ab7",
+                          borderRadius: 8, fontWeight: "bold", fontSize: 18, padding: "12px 20px", cursor: "pointer"
+                        }}
+                      >
+                        📄 Parking Word Format
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        const parkingToShow = parkingData.filter((p: any) => {
+                          const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+                          return !invygoPlates.includes(plateNumber);
+                        });
+                        
+                        const headers = ['Plate_Number', 'Date', 'Time', 'Amount', 'Description', 'Tax_Invoice_No', 'Contract', 'Booking_Number', 'Customer', 'Pickup_Branch', 'Model', 'Contract_Start', 'Contract_End'];
+                        const dataRowsStrings = parkingToShow.map((p: any) => [
+                          p.Plate_Number || '', p.Date || '', p.Time || '', p.Amount || '',
+                          p.Description || '', p.Tax_Invoice_No || '', p.Contract || '',
+                          p.Booking_Number || '', p.Customer_Contract || '', p.Pickup_Branch || '',
+                          p.Model_Contract || '', p.Contract_Start || '', p.Contract_End || ''
+                        ].join(','));
+                        
+                        const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...dataRowsStrings].join("\n");
+                        const link = document.createElement("a");
+                        link.setAttribute("href", encodeURI(csvContent));
+                        link.setAttribute("download", `yelo_complete_parking_data_${startDate}_to_${endDate}.csv`);
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        setShowExportDialog(false);
+                      }}
+                      style={{
+                        background: "#FFD600", color: "#222", border: "2px solid #673ab7",
+                        borderRadius: 8, fontWeight: "bold", fontSize: 18, padding: "12px 20px", cursor: "pointer"
+                      }}
+                    >
+                      📊 Complete YELO Parking Data
+                    </button>
+                  )
+                ) : (
+                  <button
+                    onClick={() => {
+                      const headerRowString = [contractNoHeader, customerHeader, plateNoHeader, pickupHeader, dropoffHeader].filter(h => h).join(",");
+                      const dataRowsStrings = contractsToShow.map((c: any) => [
+                        contractNoHeader ? c[contractNoHeader] : '', customerHeader ? c[customerHeader] : '',
+                        plateNoHeader ? c[plateNoHeader] : '', pickupHeader ? formatDate(c[pickupHeader]) : '',
+                        dropoffHeader ? formatDate(c[dropoffHeader]) : ''
+                      ].join(','));
+                      
+                      let prefix = '';
+                      if (view === 'contracts') {
+                        prefix = invygoFilter === 'invygo' ? 'Invygo_Contracts' : invygoFilter === 'other' ? 'Other_Contracts' : 'All_Contracts';
+                      } else if (view === 'unrented') {
+                        prefix = 'Unrented_Cars';
+                      } else if (view === 'repeated') {
+                        prefix = 'Repeated_Cars';
+                      }
+                      
+                      const csvContent = "data:text/csv;charset=utf-8," + [headerRowString, ...dataRowsStrings].join("\n");
+                      const link = document.createElement("a");
+                      link.setAttribute("href", encodeURI(csvContent));
+                      link.setAttribute("download", `${prefix}_${startDate}_to_${endDate}.csv`);
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      setShowExportDialog(false);
+                    }}
+                    style={{
+                      background: "#FFD600", color: "#222", border: "2px solid #673ab7",
+                      borderRadius: 8, fontWeight: "bold", fontSize: 18, padding: "12px 20px", cursor: "pointer"
+                    }}
+                  >
+                    📊 Export CSV
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowExportDialog(false)}
+                  style={{
+                    background: "#fff", color: "#673ab7", border: "2px solid #FFD600",
+                    borderRadius: 8, fontWeight: "bold", fontSize: 16, padding: "10px 20px", cursor: "pointer"
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showCopyDialog && (
+          <div style={{
+            position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh",
+            background: "#0008", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 50
+          }}>
+            <div style={{
+              background: "#fff", padding: 24, borderRadius: 18, boxShadow: "0 4px 24px #0003", maxWidth: 500, width: "100%", maxHeight: "80vh", overflowY: "auto"
+            }}>
+              <h3 style={{ color: "#673ab7", fontWeight: "bold", fontSize: 24, marginBottom: 18, textAlign: "center" }}>Select Columns to Copy</h3>
+              <div style={{ marginBottom: 20 }}>
+                {getAvailableColumns().map(column => (
+                  <label key={column} style={{ display: "block", marginBottom: 10, fontSize: 16, cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedColumns.includes(column)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedColumns([...selectedColumns, column]);
+                        } else {
+                          setSelectedColumns(selectedColumns.filter(c => c !== column));
+                        }
+                      }}
+                      style={{ marginRight: 8, width: 16, height: 16 }}
+                    />
+                    {column}
+                  </label>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+                <button
+                  onClick={copySelectedColumns}
+                  disabled={selectedColumns.length === 0}
+                  style={{
+                    background: selectedColumns.length > 0 ? "#FFD600" : "#ccc",
+                    color: "#222",
+                    border: "none",
+                    borderRadius: 8,
+                    fontWeight: "bold",
+                    fontSize: 16,
+                    padding: "10px 20px",
+                    cursor: selectedColumns.length > 0 ? "pointer" : "not-allowed"
+                  }}
+                >
+                  Copy Selected
+                </button>
+                <button
+                  onClick={() => {
+                    setShowCopyDialog(false);
+                    setSelectedColumns([]);
+                  }}
+                  style={{
+                    background: "#fff",
+                    color: "#673ab7",
+                    border: "2px solid #FFD600",
+                    borderRadius: 8,
+                    fontWeight: "bold",
+                    fontSize: 16,
+                    padding: "10px 20px",
+                    cursor: "pointer"
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {selectedContract && (
