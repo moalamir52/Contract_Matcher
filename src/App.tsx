@@ -1028,8 +1028,8 @@ export default function App() {
                 }
                 
                 // Apply parking filter
-                if (parkingFilter === 'matched' && !p.Contract) return false;
-                if (parkingFilter === 'unmatched' && p.Contract) return false;
+                if (parkingFilter === 'matched' && (!p.Contract || p.Contract === '')) return false;
+                if (parkingFilter === 'unmatched' && (p.Contract && p.Contract !== '')) return false;
                 
                 const plateMatch = p.Plate_Number?.toString().toLowerCase().includes(search.toLowerCase());
                 const contractMatch = p.Contract?.toString().toLowerCase().includes(search.toLowerCase());
