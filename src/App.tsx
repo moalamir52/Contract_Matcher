@@ -50,6 +50,41 @@ function formatDateTime(value: any): string {
   return `${dateStr} ${timeStr}`;
 }
 
+function formatTimeOnly(timeValue: any): string {
+  if (!timeValue) return '';
+  
+  // If it's already in HH:mm format, return as is
+  if (typeof timeValue === 'string' && /^\d{1,2}:\d{2}$/.test(timeValue)) {
+    const [hours, minutes] = timeValue.split(':');
+    return `${hours.padStart(2, '0')}:${minutes}`;
+  }
+  
+  // If it's a time string like "2:30 PM" or "14:30"
+  if (typeof timeValue === 'string') {
+    const time = timeValue.toLowerCase().trim();
+    
+    // Handle AM/PM format
+    if (time.includes('am') || time.includes('pm')) {
+      const [timePart, period] = time.split(/\s+/);
+      let [hours, minutes] = timePart.split(':').map(Number);
+      
+      if (period === 'pm' && hours !== 12) hours += 12;
+      if (period === 'am' && hours === 12) hours = 0;
+      
+      return `${hours.toString().padStart(2, '0')}:${(minutes || 0).toString().padStart(2, '0')}`;
+    }
+    
+    // Handle 24-hour format
+    const match = time.match(/^(\d{1,2}):(\d{2})/);
+    if (match) {
+      const [, hours, minutes] = match;
+      return `${hours.padStart(2, '0')}:${minutes}`;
+    }
+  }
+  
+  return timeValue.toString();
+}
+
 export default function App() {
   const [view, setView] = useState<'contracts' | 'unrented' | 'repeated' | 'parking'>('contracts');
   const [contracts, setContracts] = useState<any[]>([]);
@@ -1564,8 +1599,8 @@ export default function App() {
                           
                           const headers = ['Plate_Number', 'Date', 'Time', 'Amount', 'Description', 'Dealer_Booking_Number', 'Tax_Invoice_No'];
                           const dataRowsStrings = parkingToShow.map((p: any) => [
-                            p.Plate_Number || '', p.Date || '', p.Time || '', p.Amount || '',
-                            p.Description || '', p.Dealer_Booking_Number || '', p.Tax_Invoice_No || ''
+                            p.Plate_Number || '', formatDate(p.Date) || '', formatTimeOnly(p.Time_Out) || '', p.Amount || '',
+                            p.Description || '', p.Contract || '', p.Tax_Invoice_No || ''
                           ].join(','));
                           
                           const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...dataRowsStrings].join("\n");
@@ -1594,7 +1629,7 @@ export default function App() {
                           const headers = ['Contract', 'Dealer_Booking_Number', 'Model', 'Plate_Number', 'Date', 'Time', 'Time_In', 'Time_Out', 'Amount', 'Customer Name', 'Tax_Invoice_No'];
                           const dataRowsStrings = parkingToShow.map((p: any) => [
                             p.Contract || '', p.Dealer_Booking_Number || '', p.Model || '', p.Plate_Number || '',
-                            p.Date || '', p.Time || '', p.Time_In || '', p.Time_Out || '',
+                            formatDate(p.Date) || '', p.Time || '', p.Time_In || '', p.Time_Out || '',
                             p.Amount || '', p.Customer_Name || '', p.Tax_Invoice_No || ''
                           ].join(','));
                           
