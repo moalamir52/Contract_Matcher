@@ -228,6 +228,15 @@ export default function App() {
   const handleFileUpload = (e: any) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
+    
+    // Clear existing data when new file is uploaded
+    setContracts([]);
+    setFiltered([]);
+    setUnrentedPlates([]);
+    setRepeatedContracts([]);
+    setParkingData([]);
+    setInvygoSummary({ invygoCount: 0, nonInvygoCount: 0 });
+    
     const reader = new FileReader();
     reader.onload = (evt: any) => {
       const data = new Uint8Array(evt.target.result);
@@ -261,6 +270,10 @@ export default function App() {
   const handleInvygoUpload = (e: any) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
+    
+    // Clear existing invygo plates when new file is uploaded
+    setInvygoPlates([]);
+    
     const reader = new FileReader();
     reader.onload = (evt: any) => {
       const data = new Uint8Array(evt.target.result);
@@ -281,6 +294,10 @@ export default function App() {
   const handleParkingUpload = (e: any) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
+    
+    // Clear existing parking data when new file is uploaded
+    setParkingData([]);
+    
     const reader = new FileReader();
     
     const processData = (jsonData: any[]) => {
@@ -519,6 +536,10 @@ export default function App() {
   const handleDealerBookingUpload = (e: any) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
+    
+    // Clear existing dealer bookings when new file is uploaded
+    setDealerBookings([]);
+    
     const reader = new FileReader();
     
     if (file.name.toLowerCase().endsWith('.csv')) {
