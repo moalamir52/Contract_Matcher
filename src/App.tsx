@@ -1682,7 +1682,7 @@ export default function App() {
                           // Apply date filter
                           const dateFilteredData = parkingToShow.filter((p: any) => isDateInRange(p.Date, startDate, endDate));
                           
-                          const headers = ['Contract', 'Dealer_Booking_Number', 'Model', 'Plate_Number', 'Date', 'Time', 'Time_In', 'Time_Out', 'Amount', 'Customer Name', 'Tax_Invoice_No'];
+                          const headers = ['Contract', 'Dealer_Booking_Number', 'Model', 'Plate_Number', 'Date', 'Time', 'Time_In', 'Time_Out', 'Amount', 'Customer_Name', 'Tax_Invoice_No'];
                           const dataRowsStrings = dateFilteredData.map((p: any) => [
                             p.Contract || '', p.Dealer_Booking_Number || '', p.Model || '', p.Plate_Number || '',
                             formatDate(p.Date) || '', p.Time || '', p.Time_In || '', p.Time_Out || '',
