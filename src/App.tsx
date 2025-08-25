@@ -1615,7 +1615,14 @@ export default function App() {
                         onClick={() => {
                           const parkingToShow = parkingData.filter((p: any) => {
                             const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
-                            return invygoPlates.includes(plateNumber);
+                            const isInvygoCar = invygoPlates.includes(plateNumber);
+                            if (!isInvygoCar) return false;
+                            
+                            // Apply parking filter
+                            if (parkingFilter === 'matched' && !p.Contract) return false;
+                            if (parkingFilter === 'unmatched' && p.Contract) return false;
+                            
+                            return true;
                           });
                           
                           const headers = ['Plate_Number', 'Date', 'Time', 'Amount', 'Description', 'Dealer_Booking_Number', 'Tax_Invoice_No'];
@@ -1644,7 +1651,14 @@ export default function App() {
                         onClick={() => {
                           const parkingToShow = parkingData.filter((p: any) => {
                             const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
-                            return invygoPlates.includes(plateNumber);
+                            const isInvygoCar = invygoPlates.includes(plateNumber);
+                            if (!isInvygoCar) return false;
+                            
+                            // Apply parking filter
+                            if (parkingFilter === 'matched' && !p.Contract) return false;
+                            if (parkingFilter === 'unmatched' && p.Contract) return false;
+                            
+                            return true;
                           });
                           
                           const headers = ['Contract', 'Dealer_Booking_Number', 'Model', 'Plate_Number', 'Date', 'Time', 'Time_In', 'Time_Out', 'Amount', 'Customer Name', 'Tax_Invoice_No'];
@@ -1676,7 +1690,14 @@ export default function App() {
                       onClick={() => {
                         const parkingToShow = parkingData.filter((p: any) => {
                           const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
-                          return !invygoPlates.includes(plateNumber);
+                          const isInvygoCar = invygoPlates.includes(plateNumber);
+                          if (isInvygoCar) return false;
+                          
+                          // Apply parking filter
+                          if (parkingFilter === 'matched' && !p.Contract) return false;
+                          if (parkingFilter === 'unmatched' && p.Contract) return false;
+                          
+                          return true;
                         });
                         
                         const headers = ['Plate_Number', 'Date', 'Time', 'Amount', 'Description', 'Tax_Invoice_No', 'Contract', 'Booking_Number', 'Customer', 'Pickup_Branch', 'Model', 'Contract_Start', 'Contract_End'];
