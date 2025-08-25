@@ -85,6 +85,21 @@ function formatTimeOnly(timeValue: any): string {
   return timeValue.toString();
 }
 
+function isDateInRange(dateValue: any, startDate: string, endDate: string): boolean {
+  if (!startDate || !endDate || !dateValue) return true;
+  
+  const date = parseExcelDate(dateValue);
+  if (!date) return true;
+  
+  const startParts = startDate.split('-');
+  const start = new Date(Date.UTC(Number(startParts[0]), Number(startParts[1]) - 1, Number(startParts[2])));
+  
+  const endParts = endDate.split('-');
+  const end = new Date(Date.UTC(Number(endParts[0]), Number(endParts[1]) - 1, Number(endParts[2]), 23, 59, 59, 999));
+  
+  return date >= start && date <= end;
+}
+
 export default function App() {
   const [view, setView] = useState<'contracts' | 'unrented' | 'repeated' | 'parking'>('contracts');
   const [contracts, setContracts] = useState<any[]>([]);
@@ -1625,8 +1640,11 @@ export default function App() {
                             return true;
                           });
                           
+                          // Apply date filter
+                          const dateFilteredData = parkingToShow.filter((p: any) => isDateInRange(p.Date, startDate, endDate));
+                          
                           const headers = ['Plate_Number', 'Date', 'Time', 'Amount', 'Description', 'Dealer_Booking_Number', 'Tax_Invoice_No'];
-                          const dataRowsStrings = parkingToShow.map((p: any) => [
+                          const dataRowsStrings = dateFilteredData.map((p: any) => [
                             p.Plate_Number || '', formatDate(p.Date) || '', formatTimeOnly(p.Time_Out) || '', p.Amount || '',
                             p.Description || '', p.Contract || '', p.Tax_Invoice_No || ''
                           ].join(','));
@@ -1661,8 +1679,11 @@ export default function App() {
                             return true;
                           });
                           
+                          // Apply date filter
+                          const dateFilteredData = parkingToShow.filter((p: any) => isDateInRange(p.Date, startDate, endDate));
+                          
                           const headers = ['Contract', 'Dealer_Booking_Number', 'Model', 'Plate_Number', 'Date', 'Time', 'Time_In', 'Time_Out', 'Amount', 'Customer Name', 'Tax_Invoice_No'];
-                          const dataRowsStrings = parkingToShow.map((p: any) => [
+                          const dataRowsStrings = dateFilteredData.map((p: any) => [
                             p.Contract || '', p.Dealer_Booking_Number || '', p.Model || '', p.Plate_Number || '',
                             formatDate(p.Date) || '', p.Time || '', p.Time_In || '', p.Time_Out || '',
                             p.Amount || '', p.Customer_Name || '', p.Tax_Invoice_No || ''
@@ -1700,8 +1721,11 @@ export default function App() {
                           return true;
                         });
                         
+                        // Apply date filter
+                        const dateFilteredData = parkingToShow.filter((p: any) => isDateInRange(p.Date, startDate, endDate));
+                        
                         const headers = ['Plate_Number', 'Date', 'Time', 'Amount', 'Description', 'Tax_Invoice_No', 'Contract', 'Booking_Number', 'Customer', 'Pickup_Branch', 'Model', 'Contract_Start', 'Contract_End'];
-                        const dataRowsStrings = parkingToShow.map((p: any) => [
+                        const dataRowsStrings = dateFilteredData.map((p: any) => [
                           p.Plate_Number || '', p.Date || '', p.Time || '', p.Amount || '',
                           p.Description || '', p.Tax_Invoice_No || '', p.Contract || '',
                           p.Booking_Number || '', p.Customer_Contract || '', p.Pickup_Branch || '',
