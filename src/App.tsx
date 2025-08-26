@@ -330,6 +330,7 @@ export default function App() {
       const updatedData = jsonData.map((row: any) => {
         const plateNumber = (row['Plate_Number'] || '').toString().replace(/\s/g, '').trim().toUpperCase();
         const parkingDate = parseExcelDate(row['Date']);
+        const timeIn = row['Time_In'] ? row['Time_In'].toString() : '';
         
 
         
@@ -355,9 +356,24 @@ export default function App() {
               const statusHeader = findHeader(['Status']);
               const status = statusHeader ? c[statusHeader]?.toString().toLowerCase() : '';
               
-              if (contractPlate !== plateNumber || !pickup) return false;
+              if (contractPlate !== plateNumber || !pickup || !parkingDate) return false;
               
-              const parkingTime = parkingDate.getTime();
+              // Create parking datetime by combining date and time_in
+              let parkingDateTime = new Date(parkingDate);
+              if (timeIn) {
+                const timeMatch = timeIn.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+                if (timeMatch) {
+                  let [, hours, minutes, period] = timeMatch;
+                  let hour24 = parseInt(hours);
+                  if (period) {
+                    if (period.toUpperCase() === 'PM' && hour24 !== 12) hour24 += 12;
+                    if (period.toUpperCase() === 'AM' && hour24 === 12) hour24 = 0;
+                  }
+                  parkingDateTime.setHours(hour24, parseInt(minutes), 0, 0);
+                }
+              }
+              
+              const parkingTime = parkingDateTime.getTime();
               const pickupTime = pickup.getTime();
               
               // If contract is open (based on Status column), check if parking time >= pickup time
@@ -380,7 +396,21 @@ export default function App() {
                 matchingContract = matchingContracts[0];
               } else {
                 // Multiple contracts found - prioritize based on status and time
-                const parkingTime = parkingDate.getTime();
+                // Create parking datetime by combining date and time_in for comparison
+                let parkingDateTime = new Date(parkingDate);
+                if (timeIn) {
+                  const timeMatch = timeIn.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+                  if (timeMatch) {
+                    let [, hours, minutes, period] = timeMatch;
+                    let hour24 = parseInt(hours);
+                    if (period) {
+                      if (period.toUpperCase() === 'PM' && hour24 !== 12) hour24 += 12;
+                      if (period.toUpperCase() === 'AM' && hour24 === 12) hour24 = 0;
+                    }
+                    parkingDateTime.setHours(hour24, parseInt(minutes), 0, 0);
+                  }
+                }
+                const parkingTime = parkingDateTime.getTime();
                 const statusHeader = findHeader(['Status']);
                 
                 // Separate open and closed contracts
