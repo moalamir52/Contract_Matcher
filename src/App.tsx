@@ -11,6 +11,16 @@ function parseExcelDate(value: any): Date | null {
     return excelDate ? new Date(excelDate.y, excelDate.m - 1, excelDate.d, excelDate.H || 0, excelDate.M || 0, excelDate.S || 0) : null;
   }
   if (typeof value === 'string') {
+    // Check if string contains both date and time with AM/PM (DD/MM/YYYY HH:MM AM/PM)
+    const dateTimeAmPmMatch = value.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+    if (dateTimeAmPmMatch) {
+      const [, day, month, year, hour, minute, period] = dateTimeAmPmMatch;
+      let hour24 = parseInt(hour);
+      if (period.toUpperCase() === 'PM' && hour24 !== 12) hour24 += 12;
+      if (period.toUpperCase() === 'AM' && hour24 === 12) hour24 = 0;
+      return new Date(parseInt(year), parseInt(month) - 1, parseInt(day), hour24, parseInt(minute));
+    }
+    
     // Check if string contains both date and time (DD/MM/YYYY HH:MM)
     const dateTimeMatch = value.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})/);
     if (dateTimeMatch) {
@@ -350,14 +360,12 @@ export default function App() {
               const parkingTime = parkingDate.getTime();
               const pickupTime = pickup.getTime();
               
-
-              
               // If contract is open (based on Status column), check if parking time >= pickup time
               if (status === 'open' || status === 'active') {
                   return parkingTime >= pickupTime;
               }
               
-              // Closed contract: check if parking time is within contract period (exact time comparison)
+              // Closed contract: check if parking time is within contract period
               if (!dropoff) return false;
               const dropoffTime = dropoff.getTime();
               return parkingTime >= pickupTime && parkingTime <= dropoffTime;
@@ -385,32 +393,19 @@ export default function App() {
                   return status !== 'open' && status !== 'active';
                 });
                 
-                // If there are open contracts, prefer the one with pickup closest to parking time
+                // If there are open contracts, prefer the most recent one
                 if (openContracts.length > 0) {
                   matchingContract = openContracts.reduce((best, current) => {
                     const bestPickup = parseExcelDate(best[pickupHeader])?.getTime() || 0;
                     const currentPickup = parseExcelDate(current[pickupHeader])?.getTime() || 0;
-                    
-                    // Choose the pickup time closest to parking time
-                    const bestDiff = Math.abs(parkingTime - bestPickup);
-                    const currentDiff = Math.abs(parkingTime - currentPickup);
-                    return currentDiff < bestDiff ? current : best;
+                    return currentPickup > bestPickup ? current : best;
                   });
                 } else {
-                  // Only closed contracts - choose the one that parking time falls within
+                  // Only closed contracts - choose the most recent one
                   matchingContract = closedContracts.reduce((best, current) => {
                     const bestPickup = parseExcelDate(best[pickupHeader])?.getTime() || 0;
                     const currentPickup = parseExcelDate(current[pickupHeader])?.getTime() || 0;
-                    
-                    // If parking is after both pickups, choose the later one (most recent)
-                    if (parkingTime >= bestPickup && parkingTime >= currentPickup) {
-                      return currentPickup > bestPickup ? current : best;
-                    }
-                    
-                    // Otherwise, choose closest pickup time
-                    const bestDiff = Math.abs(parkingTime - bestPickup);
-                    const currentDiff = Math.abs(parkingTime - currentPickup);
-                    return currentDiff < bestDiff ? current : best;
+                    return currentPickup > bestPickup ? current : best;
                   });
                 }
               }
@@ -1634,17 +1629,17 @@ export default function App() {
                             if (!isInvygoCar) return false;
                             
                             // Apply parking filter
-                            if (parkingFilter === 'matched' && !p.Contract) return false;
-                            if (parkingFilter === 'unmatched' && p.Contract) return false;
+                            if (parkingFilter === 'matched' && (!p.Contract || p.Contract === '')) return false;
+                            if (parkingFilter === 'unmatched' && (p.Contract && p.Contract !== '')) return false;
                             
-                            return true;
+                            // Apply search filter
+                            const plateMatch = p.Plate_Number?.toString().toLowerCase().includes(search.toLowerCase());
+                            const contractMatch = p.Contract?.toString().toLowerCase().includes(search.toLowerCase());
+                            return plateMatch || contractMatch || !search;
                           });
                           
-                          // Apply date filter
-                          const dateFilteredData = parkingToShow.filter((p: any) => isDateInRange(p.Date, startDate, endDate));
-                          
                           const headers = ['Plate_Number', 'Date', 'Time', 'Amount', 'Description', 'Dealer_Booking_Number', 'Tax_Invoice_No'];
-                          const dataRowsStrings = dateFilteredData.map((p: any) => [
+                          const dataRowsStrings = parkingToShow.map((p: any) => [
                             p.Plate_Number || '', formatDate(p.Date) || '', formatTimeOnly(p.Time_Out) || '', p.Amount || '',
                             p.Description || '', p.Contract || '', p.Tax_Invoice_No || ''
                           ].join(','));
@@ -1673,17 +1668,17 @@ export default function App() {
                             if (!isInvygoCar) return false;
                             
                             // Apply parking filter
-                            if (parkingFilter === 'matched' && !p.Contract) return false;
-                            if (parkingFilter === 'unmatched' && p.Contract) return false;
+                            if (parkingFilter === 'matched' && (!p.Contract || p.Contract === '')) return false;
+                            if (parkingFilter === 'unmatched' && (p.Contract && p.Contract !== '')) return false;
                             
-                            return true;
+                            // Apply search filter
+                            const plateMatch = p.Plate_Number?.toString().toLowerCase().includes(search.toLowerCase());
+                            const contractMatch = p.Contract?.toString().toLowerCase().includes(search.toLowerCase());
+                            return plateMatch || contractMatch || !search;
                           });
                           
-                          // Apply date filter
-                          const dateFilteredData = parkingToShow.filter((p: any) => isDateInRange(p.Date, startDate, endDate));
-                          
                           const headers = ['Contract', 'Dealer_Booking_Number', 'Model', 'Plate_Number', 'Date', 'Time', 'Time_In', 'Time_Out', 'Amount', 'Customer_Name', 'Tax_Invoice_No'];
-                          const dataRowsStrings = dateFilteredData.map((p: any) => [
+                          const dataRowsStrings = parkingToShow.map((p: any) => [
                             p.Contract || '', p.Dealer_Booking_Number || '', p.Model || '', p.Plate_Number || '',
                             formatDate(p.Date) || '', p.Time || '', p.Time_In || '', p.Time_Out || '',
                             p.Amount || '', p.Customer_Name || '', p.Tax_Invoice_No || ''
@@ -1715,17 +1710,17 @@ export default function App() {
                           if (isInvygoCar) return false;
                           
                           // Apply parking filter
-                          if (parkingFilter === 'matched' && !p.Contract) return false;
-                          if (parkingFilter === 'unmatched' && p.Contract) return false;
+                          if (parkingFilter === 'matched' && (!p.Contract || p.Contract === '')) return false;
+                          if (parkingFilter === 'unmatched' && (p.Contract && p.Contract !== '')) return false;
                           
-                          return true;
+                          // Apply search filter
+                          const plateMatch = p.Plate_Number?.toString().toLowerCase().includes(search.toLowerCase());
+                          const contractMatch = p.Contract?.toString().toLowerCase().includes(search.toLowerCase());
+                          return plateMatch || contractMatch || !search;
                         });
                         
-                        // Apply date filter
-                        const dateFilteredData = parkingToShow.filter((p: any) => isDateInRange(p.Date, startDate, endDate));
-                        
                         const headers = ['Plate_Number', 'Date', 'Time', 'Amount', 'Description', 'Tax_Invoice_No', 'Contract', 'Booking_Number', 'Customer', 'Pickup_Branch', 'Model', 'Contract_Start', 'Contract_End'];
-                        const dataRowsStrings = dateFilteredData.map((p: any) => [
+                        const dataRowsStrings = parkingToShow.map((p: any) => [
                           p.Plate_Number || '', p.Date || '', p.Time || '', p.Amount || '',
                           p.Description || '', p.Tax_Invoice_No || '', p.Contract || '',
                           p.Booking_Number || '', p.Customer_Contract || '', p.Pickup_Branch || '',
