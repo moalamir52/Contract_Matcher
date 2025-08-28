@@ -110,7 +110,73 @@ function isDateInRange(dateValue: any, startDate: string, endDate: string): bool
   return date >= start && date <= end;
 }
 
+const FileUploadButton = ({ title, onUpload, accept, fileName }: { title: string, onUpload: (e: any) => void, accept: string, fileName: string | undefined }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: 'center' }}>
+      <button
+        onClick={handleClick}
+        style={{
+          background: "#FFD600",
+          color: "#222",
+          border: "2px solid #673ab7",
+          borderRadius: 8,
+          fontWeight: "bold",
+          fontSize: 16,
+          padding: "10px 20px",
+          cursor: "pointer",
+          width: 220,
+          textAlign: 'center'
+        }}
+      >
+        {title}
+      </button>
+      <input
+        type="file"
+        accept={accept}
+        onChange={onUpload}
+        ref={fileInputRef}
+        style={{ display: 'none' }}
+      />
+      {fileName && <span style={{ marginTop: 8, fontSize: 12, color: '#555' }}>{fileName}</span>}
+    </div>
+  );
+};
+
 export default function App() {
+  // Template download button
+  const [showTemplateDialog, setShowTemplateDialog] = useState(false);
+  const templateHeaders = {
+    contracts: [
+      'Contract No.', 'Customer', 'Plate No.', 'Pick-up Date', 'Drop-off Date', 'Status'
+    ],
+    invygo: [
+      'Plate'
+    ],
+            dealer: [
+          'Agreement', 'Booking ID', 'Customer', 'Brand Name', 'Car Name', 'Car Year', 'Plate'
+        ],
+    parking: [
+      'Date', 'Time', 'Plate_Number', 'Description', 'Amount', 'Time_In', 'Time_Out'
+    ]
+  };
+  const downloadTemplate = (type: keyof typeof templateHeaders) => {
+    const headers = templateHeaders[type];
+    const csvContent = headers.join(',') + '\n';
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute('download', `${type}_template.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setShowTemplateDialog(false);
+  };
   const [view, setView] = useState<'contracts' | 'unrented' | 'repeated' | 'parking'>('contracts');
   const [contracts, setContracts] = useState<any[]>([]);
   const [parkingData, setParkingData] = useState<any[]>([]);
@@ -133,6 +199,11 @@ export default function App() {
   const [showParkingDialog, setShowParkingDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [parkingFilter, setParkingFilter] = useState<'all' | 'matched' | 'unmatched'>('all');
+
+  const [contractFileName, setContractFileName] = useState<string>();
+  const [invygoFileName, setInvygoFileName] = useState<string>();
+  const [dealerFileName, setDealerFileName] = useState<string>();
+  const [parkingFileName, setParkingFileName] = useState<string>();
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -253,6 +324,7 @@ export default function App() {
   const handleFileUpload = (e: any) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
+    setContractFileName(file.name);
     
     // Clear existing data when new file is uploaded
     setContracts([]);
@@ -295,6 +367,7 @@ export default function App() {
   const handleInvygoUpload = (e: any) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
+    setInvygoFileName(file.name);
     
     // Clear existing invygo plates when new file is uploaded
     setInvygoPlates([]);
@@ -319,6 +392,7 @@ export default function App() {
   const handleParkingUpload = (e: any) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
+    setParkingFileName(file.name);
     
     // Clear existing parking data when new file is uploaded
     setParkingData([]);
@@ -576,6 +650,7 @@ export default function App() {
   const handleDealerBookingUpload = (e: any) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
+    setDealerFileName(file.name);
     
     // Clear existing dealer bookings when new file is uploaded
     setDealerBookings([]);
@@ -730,9 +805,10 @@ export default function App() {
     plate.toLowerCase().includes(search.toLowerCase())
   );
 
-  const repeatedToShow = repeatedContracts.filter(([plate]: [string]) =>
-    plate.toLowerCase().includes(search.toLowerCase())
-  );
+  const repeatedToShow = repeatedContracts.filter(([plate]: [string]) => {
+    const normalizedPlate = plate.toString().replace(/\s/g, '').trim().toUpperCase();
+    return invygoPlates.includes(normalizedPlate) && normalizedPlate.toLowerCase().includes(search.toLowerCase());
+  });
 
   const ContractsTable = (
     <div>
@@ -1248,6 +1324,14 @@ export default function App() {
     </div>
   );
 
+  // Auto-filter contracts when contracts, invygoPlates, startDate, or endDate change
+  useEffect(() => {
+    if (contracts.length > 0 && invygoPlates.length > 0 && startDate && endDate) {
+      filterContracts();
+    }
+    // eslint-disable-next-line
+  }, [contracts, invygoPlates, startDate, endDate]);
+
   return (
     <div style={{
       minHeight: "100vh",
@@ -1298,6 +1382,38 @@ export default function App() {
         minHeight: 600
       }}>
         <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 18 }}>
+          <button
+            onClick={() => setShowTemplateDialog(true)}
+            style={{
+              background: "#fff",
+              color: "#673ab7",
+              border: "2px solid #FFD600",
+              borderRadius: 8,
+              fontWeight: "bold",
+              fontSize: 16,
+              padding: "8px 18px",
+              cursor: "pointer"
+            }}
+          >Template</button>
+      {showTemplateDialog && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh",
+          background: "#0008", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 100
+        }}>
+          <div style={{
+            background: "#fff", padding: 24, borderRadius: 18, boxShadow: "0 4px 24px #0003", maxWidth: 350, width: "100%"
+          }}>
+            <h3 style={{ color: "#673ab7", fontWeight: "bold", fontSize: 22, marginBottom: 18, textAlign: "center" }}>Download Template</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <button onClick={() => downloadTemplate('contracts')} style={{ background: "#FFD600", color: "#222", border: "2px solid #673ab7", borderRadius: 8, fontWeight: "bold", fontSize: 16, padding: "10px 20px", cursor: "pointer" }}>Contracts File</button>
+              <button onClick={() => downloadTemplate('invygo')} style={{ background: "#FFD600", color: "#222", border: "2px solid #673ab7", borderRadius: 8, fontWeight: "bold", fontSize: 16, padding: "10px 20px", cursor: "pointer" }}>Invygo Cars File</button>
+              <button onClick={() => downloadTemplate('dealer')} style={{ background: "#FFD600", color: "#222", border: "2px solid #673ab7", borderRadius: 8, fontWeight: "bold", fontSize: 16, padding: "10px 20px", cursor: "pointer" }}>Dealer Booking File</button>
+              <button onClick={() => downloadTemplate('parking')} style={{ background: "#FFD600", color: "#222", border: "2px solid #673ab7", borderRadius: 8, fontWeight: "bold", fontSize: 16, padding: "10px 20px", cursor: "pointer" }}>Parking File</button>
+              <button onClick={() => setShowTemplateDialog(false)} style={{ background: "#fff", color: "#673ab7", border: "2px solid #FFD600", borderRadius: 8, fontWeight: "bold", fontSize: 15, padding: "8px 18px", cursor: "pointer" }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
           <input
             type="text"
             placeholder="🔍 Search..."
@@ -1401,7 +1517,7 @@ export default function App() {
               fontSize: 16,
               padding: "8px 18px",
               cursor: "pointer"
-            }}>Repeated Cars ({repeatedContracts.length})</button>
+            }}>Repeated Cars ({repeatedToShow.length})</button>
           <button
             onClick={() => setShowParkingDialog(true)}
             style={{
@@ -1416,82 +1532,32 @@ export default function App() {
             }}>Parking ({parkingData.length})</button>
         </div>
         <div style={{ display: "flex", gap: 20, alignItems: "flex-end", marginBottom: 22, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <label style={{ marginBottom: 6, fontWeight: "bold", color: "#222", fontSize: 16 }}>
-              Contracts File
-            </label>
-            <input
-              type="file"
-              accept=".xlsx, .xls"
-              onChange={handleFileUpload}
-              style={{
-                marginBottom: 0,
-                padding: 7,
-                borderRadius: 8,
-                border: "1.2px solid #eee",
-                width: 180,
-                background: "#f8f8f8",
-                fontSize: 15
-              }}
-            />
           </div>
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <label style={{ marginBottom: 6, fontWeight: "bold", color: "#222", fontSize: 16 }}>
-              Invygo Cars File
-            </label>
-            <input
-              type="file"
-              accept=".xlsx, .xls"
-              onChange={handleInvygoUpload}
-              style={{
-                marginBottom: 0,
-                padding: 7,
-                borderRadius: 8,
-                border: "1.2px solid #eee",
-                width: 180,
-                background: "#f8f8f8",
-                fontSize: 15
-              }}
-            />
-          </div>
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <label style={{ marginBottom: 6, fontWeight: "bold", color: "#222", fontSize: 16 }}>
-              Dealer Booking File
-            </label>
-            <input
-              type="file"
-              accept=".xlsx, .xls, .csv"
-              onChange={handleDealerBookingUpload}
-              style={{
-                marginBottom: 0,
-                padding: 7,
-                borderRadius: 8,
-                border: "1.2px solid #eee",
-                width: 180,
-                background: "#f8f8f8",
-                fontSize: 15
-              }}
-            />
-          </div>
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <label style={{ marginBottom: 6, fontWeight: "bold", color: "#222", fontSize: 16 }}>
-              Parking File
-            </label>
-            <input
-              type="file"
-              accept=".xlsx, .xls, .csv"
-              onChange={handleParkingUpload}
-              style={{
-                marginBottom: 0,
-                padding: 7,
-                borderRadius: 8,
-                border: "1.2px solid #eee",
-                width: 180,
-                background: "#f8f8f8",
-                fontSize: 15
-              }}
-            />
-          </div>
+        <div style={{ display: "flex", gap: 20, alignItems: "flex-end", marginBottom: 22, flexWrap: "wrap" }}>
+          <FileUploadButton
+            title="Upload Contracts File"
+            onUpload={handleFileUpload}
+            accept=".xlsx, .xls"
+            fileName={contractFileName}
+          />
+          <FileUploadButton
+            title="Upload Invygo Cars"
+            onUpload={handleInvygoUpload}
+            accept=".xlsx, .xls"
+            fileName={invygoFileName}
+          />
+          <FileUploadButton
+            title="Upload Bookings File"
+            onUpload={handleDealerBookingUpload}
+            accept=".xlsx, .xls, .csv"
+            fileName={dealerFileName}
+          />
+          <FileUploadButton
+            title="Upload Parking File"
+            onUpload={handleParkingUpload}
+            accept=".xlsx, .xls, .csv"
+            fileName={parkingFileName}
+          />
           <div style={{ display: "flex", flexDirection: "column" }}>
             <label style={{ fontSize: 16, fontWeight: "bold", marginBottom: 4, textAlign: "center" }}>From</label>
             <input
