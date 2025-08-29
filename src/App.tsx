@@ -1366,9 +1366,9 @@ export default function App() {
         textAlign: "center",
         border: "3px solid #673ab7"
       }}>
-        <h1 style={{ color: "#673ab7", fontWeight: "bold", fontSize: 38, margin: 0 }}>Invygo Contracts </h1>
+        <h1 style={{ color: "#673ab7", fontWeight: "bold", fontSize: 38, margin: 0 }}>Contract Matcher </h1>
         <div style={{ color: "#222", fontSize: 18, marginTop: 8, marginBottom: 0 }}>
-          Search and view all contracts in one place
+          The smart tool for matching and analyzing car rental contracts.
         </div>
       </div>
 
