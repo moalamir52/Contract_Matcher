@@ -616,7 +616,7 @@ export default function App() {
           plateNoHeader={plateNoHeader} 
           pickupHeader={pickupHeader} 
           dropoffHeader={dropoffHeader} 
-          contractsToShow={contractsToShow} 
+          contractsToShow={view === 'unrented' ? unrentedToShow : view === 'repeated' ? repeatedToShow : contractsToShow} 
           invygoFilter={invygoFilter} 
         />
 

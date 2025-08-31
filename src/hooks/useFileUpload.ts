@@ -311,22 +311,16 @@ export const useFileUpload = () => {
         if (file.name.toLowerCase().endsWith('.csv')) {
           reader.onload = (evt: any) => {
             const text = evt.target.result;
-            const lines = text.split('\n').filter((line: string) => line.trim());
-            if (lines.length === 0) return;
-            
-            const headers = lines[0].split(',').map((h: string) => h.trim().replace(/"/g, ''));
-            const jsonData = lines.slice(1).map((line: string) => {
-              const values = line.split(',').map((v: string) => v.trim().replace(/"/g, ''));
-              const row: any = {};
-              headers.forEach((header: string, index: number) => {
-                row[header] = values[index] || '';
-              });
-              return row;
-            }).filter((row: any) => Object.values(row).some(v => v !== null && v !== ''));
+            const workbook = XLSX.read(text, { type: 'string', codepage: 65001 }); // codepage 65001 for UTF-8
+            const sheetName = workbook.SheetNames[0];
+            const sheet = workbook.Sheets[sheetName] as XLSX.WorkSheet;
+            const jsonData = XLSX.utils.sheet_to_json(sheet).filter((row: any) =>
+              Object.values(row).some(v => v !== null && v !== '')
+            );
             
             processData(jsonData);
           };
-          reader.readAsText(file);
+          reader.readAsText(file); // Read as text, default UTF-8
         } else { // XLSX
           reader.onload = (evt: any) => {
             const data = new Uint8Array(evt.target.result);
@@ -353,26 +347,21 @@ export const useFileUpload = () => {
         
         const reader = new FileReader();
         
-        if (file.name.toLowerCase().endsWith('.csv')) {
+                if (file.name.toLowerCase().endsWith('.csv')) {
           reader.onload = (evt: any) => {
             const text = evt.target.result;
-            const lines = text.split('\n').filter((line: string) => line.trim());
-            if (lines.length === 0) return;
-            
-            const headers = lines[0].split(',').map((h: string) => h.trim().replace(/"/g, ''));
-            const jsonData = lines.slice(1).map((line: string) => {
-              const values = line.split(',').map((v: string) => v.trim().replace(/"/g, ''));
-              const row: any = {};
-              headers.forEach((header: string, index: number) => {
-                row[header] = values[index] || '';
-              });
-              return row;
-            }).filter((row: any) => Object.values(row).some(v => v !== null && v !== ''));
+            const workbook = XLSX.read(text, { type: 'string', codepage: 65001 }); // codepage 65001 for UTF-8
+            const sheetName = workbook.SheetNames[0];
+            const sheet = workbook.Sheets[sheetName] as XLSX.WorkSheet;
+            const jsonData = XLSX.utils.sheet_to_json(sheet).filter((row: any) =>
+              Object.values(row).some(v => v !== null && v !== '')
+            );
             
             setDealerBookings(jsonData);
           };
-          reader.readAsText(file);
+          reader.readAsText(file); // Read as text, default UTF-8
         } else { // XLSX
+
           reader.onload = (evt: any) => {
             const data = new Uint8Array(evt.target.result);
             const workbook = XLSX.read(data, { type: 'array' });

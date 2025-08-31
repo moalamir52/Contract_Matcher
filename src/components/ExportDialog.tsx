@@ -58,7 +58,7 @@ const ExportDialog = ({
                             p.Description || '', p.Contract || '', p.Tax_Invoice_No || ''
                           ].join(','));
                           
-                          const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...dataRowsStrings].join("\n");
+                          const csvContent = "\uFEFF" + "data:text/csv;charset=utf-8," + [headers.join(','), ...dataRowsStrings].join("\n");
                           const link = document.createElement("a");
                           link.setAttribute("href", encodeURI(csvContent));
                           link.setAttribute("download", `invygo_parking-charges-format_${startDate}_to_${endDate}.csv`);
@@ -98,7 +98,7 @@ const ExportDialog = ({
                             p.Amount || '', p.Customer_Name || '', p.Tax_Invoice_No || ''
                           ].join(','));
                           
-                          const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...dataRowsStrings].join("\n");
+                          const csvContent = "\uFEFF" + "data:text/csv;charset=utf-8," + [headers.join(','), ...dataRowsStrings].join("\n");
                           const link = document.createElement("a");
                           link.setAttribute("href", encodeURI(csvContent));
                           link.setAttribute("download", `invygo_Parking_Word_${startDate}_to_${endDate}.csv`);
@@ -161,11 +161,23 @@ const ExportDialog = ({
                 ) : (
                   <button
                     onClick={() => {
+                      let processedContractsToShow = contractsToShow;
+
+                      if (view === 'unrented') {
+                        // Transform array of plate strings into array of objects
+                        processedContractsToShow = contractsToShow.map((plate: string) => ({
+                          [plateNoHeader]: plate
+                        }));
+                      } else if (view === 'repeated') {
+                        // Flatten the [plate, rows] structure into a single array of contract objects
+                        processedContractsToShow = contractsToShow.flatMap(([, rows]: any) => rows);
+                      }
+
                       const headerRowString = [contractNoHeader, customerHeader, plateNoHeader, pickupHeader, dropoffHeader].filter(h => h).join(",");
-                      const dataRowsStrings = contractsToShow.map((c: any) => [
+                      const dataRowsStrings = processedContractsToShow.map((c: any) => [
                         contractNoHeader ? c[contractNoHeader] : '', customerHeader ? c[customerHeader] : '',
-                        plateNoHeader ? c[plateNoHeader] : '', pickupHeader ? formatDate(c[pickupHeader]) : '',
-                        dropoffHeader ? formatDate(c[dropoffHeader]) : ''
+                        plateNoHeader ? c[plateNoHeader] : '', pickupHeader ? c[pickupHeader] : '',
+                        dropoffHeader ? c[dropoffHeader] : ''
                       ].join(','));
                       
                       let prefix = '';
