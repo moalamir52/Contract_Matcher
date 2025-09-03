@@ -1,5 +1,7 @@
 import React from 'react';
 import { formatDate, formatTimeOnly } from '../utils/dates';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
 
 const ExportDialog = ({
     showExportDialog,
@@ -22,6 +24,16 @@ const ExportDialog = ({
 }: any) => {
     if (!showExportDialog) return null;
 
+    const exportToExcel = (data: any[], fileName: string) => {
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Data");
+        const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([excelBuffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8" });
+        saveAs(blob, `${fileName}.xlsx`);
+        setShowExportDialog(false);
+    };
+
     return (
         <div style={{
             position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh",
@@ -42,30 +54,25 @@ const ExportDialog = ({
                             const isInvygoCar = invygoPlates.includes(plateNumber);
                             if (!isInvygoCar) return false;
                             
-                            // Apply parking filter
                             if (parkingFilter === 'matched' && (!p.Contract || p.Contract === '')) return false;
                             if (parkingFilter === 'unmatched' && (p.Contract && p.Contract !== '')) return false;
                             
-                            // Apply search filter
                             const plateMatch = p.Plate_Number?.toString().toLowerCase().includes(search.toLowerCase());
                             const contractMatch = p.Contract?.toString().toLowerCase().includes(search.toLowerCase());
                             return plateMatch || contractMatch || !search;
                           });
                           
-                          const headers = ['Plate_Number', 'Date', 'Time', 'Amount', 'Description', 'Dealer_Booking_Number', 'Tax_Invoice_No'];
-                          const dataRowsStrings = parkingToShow.map((p: any) => [
-                            p.Plate_Number || '', formatDate(p.Date) || '', formatTimeOnly(p.Time_Out) || '', p.Amount || '',
-                            p.Description || '', p.Contract || '', p.Tax_Invoice_No || ''
-                          ].join(','));
+                          const dataToExport = parkingToShow.map((p: any) => ({
+                            'Plate_Number': p.Plate_Number || '',
+                            'Date': formatDate(p.Date) || '',
+                            'Time': formatTimeOnly(p.Time_Out) || '',
+                            'Amount': p.Amount || '',
+                            'Description': p.Description || '',
+                            'Dealer_Booking_Number': p.Contract || '',
+                            'Tax_Invoice_No': p.Tax_Invoice_No || ''
+                          }));
                           
-                          const csvContent = "\uFEFF" + "data:text/csv;charset=utf-8," + [headers.join(','), ...dataRowsStrings].join("\n");
-                          const link = document.createElement("a");
-                          link.setAttribute("href", encodeURI(csvContent));
-                          link.setAttribute("download", `invygo_parking-charges-format_${startDate}_to_${endDate}.csv`);
-                          document.body.appendChild(link);
-                          link.click();
-                          document.body.removeChild(link);
-                          setShowExportDialog(false);
+                          exportToExcel(dataToExport, `parking-charges-format_${startDate}_to_${endDate}`);
                         }}
                         style={{
                           background: "#FFD600", color: "#222", border: "2px solid #673ab7",
@@ -81,31 +88,29 @@ const ExportDialog = ({
                             const isInvygoCar = invygoPlates.includes(plateNumber);
                             if (!isInvygoCar) return false;
                             
-                            // Apply parking filter
                             if (parkingFilter === 'matched' && (!p.Contract || p.Contract === '')) return false;
                             if (parkingFilter === 'unmatched' && (p.Contract && p.Contract !== '')) return false;
                             
-                            // Apply search filter
                             const plateMatch = p.Plate_Number?.toString().toLowerCase().includes(search.toLowerCase());
                             const contractMatch = p.Contract?.toString().toLowerCase().includes(search.toLowerCase());
                             return plateMatch || contractMatch || !search;
                           });
                           
-                          const headers = ['Contract', 'Dealer_Booking_Number', 'Model', 'Plate_Number', 'Date', 'Time', 'Time_In', 'Time_Out', 'Amount', 'Customer_Name', 'Tax_Invoice_No'];
-                          const dataRowsStrings = parkingToShow.map((p: any) => [
-                            p.Contract || '', p.Dealer_Booking_Number || '', p.Model || '', p.Plate_Number || '',
-                            formatDate(p.Date) || '', p.Time || '', p.Time_In || '', p.Time_Out || '',
-                            p.Amount || '', p.Customer_Name || '', p.Tax_Invoice_No || ''
-                          ].join(','));
-                          
-                          const csvContent = "\uFEFF" + "data:text/csv;charset=utf-8," + [headers.join(','), ...dataRowsStrings].join("\n");
-                          const link = document.createElement("a");
-                          link.setAttribute("href", encodeURI(csvContent));
-                          link.setAttribute("download", `invygo_Parking_Word_${startDate}_to_${endDate}.csv`);
-                          document.body.appendChild(link);
-                          link.click();
-                          document.body.removeChild(link);
-                          setShowExportDialog(false);
+                          const dataToExport = parkingToShow.map((p: any) => ({
+                            'Contract': p.Contract || '',
+                            'Customer Name': p.Customer_Name || '',
+                            'Dealer_Booking_Number': p.Dealer_Booking_Number || '',
+                            'Model': p.Model || '',
+                            'Plate_Number': p.Plate_Number || '',
+                            'Date': formatDate(p.Date) || '',
+                            'Time_In': p.Time_In || '',
+                            'Time_Out': p.Time_Out || '',
+                            'Time': p.Time || '',
+                            'Amount': p.Amount || '',
+                            'Tax_Invoice_No': p.Tax_Invoice_No || ''
+                          }));
+
+                          exportToExcel(dataToExport, `parking-charges-Invoice_word_${startDate}_to_${endDate}`);
                         }}
                         style={{
                           background: "#FFD600", color: "#222", border: "2px solid #673ab7",
@@ -123,32 +128,31 @@ const ExportDialog = ({
                           const isInvygoCar = invygoPlates.includes(plateNumber);
                           if (isInvygoCar) return false;
                           
-                          // Apply parking filter
                           if (parkingFilter === 'matched' && (!p.Contract || p.Contract === '')) return false;
                           if (parkingFilter === 'unmatched' && (p.Contract && p.Contract !== '')) return false;
                           
-                          // Apply search filter
                           const plateMatch = p.Plate_Number?.toString().toLowerCase().includes(search.toLowerCase());
                           const contractMatch = p.Contract?.toString().toLowerCase().includes(search.toLowerCase());
                           return plateMatch || contractMatch || !search;
                         });
                         
-                        const headers = ['Plate_Number', 'Date', 'Time', 'Amount', 'Description', 'Tax_Invoice_No', 'Contract', 'Booking_Number', 'Customer', 'Pickup_Branch', 'Model', 'Contract_Start', 'Contract_End'];
-                        const dataRowsStrings = parkingToShow.map((p: any) => [
-                          p.Plate_Number || '', p.Date || '', p.Time || '', p.Amount || '',
-                          p.Description || '', p.Tax_Invoice_No || '', p.Contract || '',
-                          p.Booking_Number || '', p.Customer_Contract || '', p.Pickup_Branch || '',
-                          p.Model_Contract || '', p.Contract_Start || '', p.Contract_End || ''
-                        ].join(','));
-                        
-                        const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...dataRowsStrings].join("\n");
-                        const link = document.createElement("a");
-                        link.setAttribute("href", encodeURI(csvContent));
-                        link.setAttribute("download", `yelo_complete_parking_data_${startDate}_to_${endDate}.csv`);
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                        setShowExportDialog(false);
+                        const dataToExport = parkingToShow.map((p: any) => ({
+                            'Plate_Number': p.Plate_Number || '',
+                            'Date': formatDate(p.Date) || '',
+                            'Time': p.Time || '',
+                            'Amount': p.Amount || '',
+                            'Description': p.Description || '',
+                            'Tax_Invoice_No': p.Tax_Invoice_No || '',
+                            'Contract': p.Contract || '',
+                            'Booking_Number': p.Booking_Number || '',
+                            'Customer': p.Customer_Contract || '',
+                            'Pickup_Branch': p.Pickup_Branch || '',
+                            'Model': p.Model_Contract || '',
+                            'Contract_Start': p.Contract_Start || '',
+                            'Contract_End': p.Contract_End || ''
+                        }));
+
+                        exportToExcel(dataToExport, `yelo_complete_parking_data_${startDate}_to_${endDate}`);
                       }}
                       style={{
                         background: "#FFD600", color: "#222", border: "2px solid #673ab7",
@@ -164,21 +168,20 @@ const ExportDialog = ({
                       let processedContractsToShow = contractsToShow;
 
                       if (view === 'unrented') {
-                        // Transform array of plate strings into array of objects
                         processedContractsToShow = contractsToShow.map((plate: string) => ({
                           [plateNoHeader]: plate
                         }));
                       } else if (view === 'repeated') {
-                        // Flatten the [plate, rows] structure into a single array of contract objects
                         processedContractsToShow = contractsToShow.flatMap(([, rows]: any) => rows);
                       }
 
-                      const headerRowString = [contractNoHeader, customerHeader, plateNoHeader, pickupHeader, dropoffHeader].filter(h => h).join(",");
-                      const dataRowsStrings = processedContractsToShow.map((c: any) => [
-                        contractNoHeader ? c[contractNoHeader] : '', customerHeader ? c[customerHeader] : '',
-                        plateNoHeader ? c[plateNoHeader] : '', pickupHeader ? c[pickupHeader] : '',
-                        dropoffHeader ? c[dropoffHeader] : ''
-                      ].join(','));
+                      const dataToExport = processedContractsToShow.map((c: any) => ({
+                        [contractNoHeader]: c[contractNoHeader] || '',
+                        [customerHeader]: c[customerHeader] || '',
+                        [plateNoHeader]: c[plateNoHeader] || '',
+                        [pickupHeader]: c[pickupHeader] || '',
+                        [dropoffHeader]: c[dropoffHeader] || ''
+                      }));
                       
                       let prefix = '';
                       if (view === 'contracts') {
@@ -189,21 +192,14 @@ const ExportDialog = ({
                         prefix = 'Repeated_Cars';
                       }
                       
-                      const csvContent = "data:text/csv;charset=utf-8," + [headerRowString, ...dataRowsStrings].join("\n");
-                      const link = document.createElement("a");
-                      link.setAttribute("href", encodeURI(csvContent));
-                      link.setAttribute("download", `${prefix}_${startDate}_to_${endDate}.csv`);
-                      document.body.appendChild(link);
-                      link.click();
-                      document.body.removeChild(link);
-                      setShowExportDialog(false);
+                      exportToExcel(dataToExport, `${prefix}_${startDate}_to_${endDate}`);
                     }}
                     style={{
                       background: "#FFD600", color: "#222", border: "2px solid #673ab7",
                       borderRadius: 8, fontWeight: "bold", fontSize: 18, padding: "12px 20px", cursor: "pointer"
                     }}
                   >
-                    📊 Export CSV
+                    📊 Export XLSX
                   </button>
                 )}
                 <button

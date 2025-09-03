@@ -117,7 +117,7 @@ export default function App() {
           'Amount': 'Amount',
           'Description': 'Description',
           'Dealer Booking': 'Dealer_Booking_Number',
-          'Customer Name': 'Customer_Name',
+          'Customer Name': 'CustomerName',
           'Tax Invoice': 'Tax_Invoice_No',
           'Contract': 'Contract',
           'Contract Start': 'Contract_Start',
