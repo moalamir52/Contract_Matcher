@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { formatDate, formatDateTime } from '../utils/dates';
 
 const ParkingTable = ({ 
@@ -8,8 +8,12 @@ const ParkingTable = ({
     parkingFilter, 
     invygoPlates, 
     search, 
-    copyToClipboard 
+    copyToClipboard,
+    updateParkingInfo
 }: any) => {
+
+    const [editingIndex, setEditingIndex] = useState<number | null>(null);
+    const [newContract, setNewContract] = useState('');
 
     const typedParkingData = parkingData.filter((p: any) => {
         const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
@@ -21,6 +25,7 @@ const ParkingTable = ({
 
     const matchedParking = typedParkingData.filter((p: any) => p.Contract);
     const unmatchedParking = typedParkingData.filter((p: any) => !p.Contract);
+    const editedParking = typedParkingData.filter((p: any) => p.manual_update);
 
     return (
         <div>
@@ -72,6 +77,12 @@ const ParkingTable = ({
           style={{color: "#f44336", cursor: 'pointer', textDecoration: 'underline'}}
         >
           {unmatchedParking.length}
+        </span> &nbsp; | &nbsp;
+        ✏️ Edited: <span
+            onClick={() => setParkingFilter('edited')}
+            style={{color: "#ff9800", cursor: 'pointer', textDecoration: 'underline'}}
+        >
+            {editedParking.length}
         </span>
         {parkingFilter !== 'all' && (
           <span onClick={() => setParkingFilter('all')} style={{cursor: 'pointer', textDecoration: 'underline', marginLeft: '10px'}}> (Show All)</span>
@@ -145,13 +156,17 @@ const ParkingTable = ({
                 // Apply parking filter
                 if (parkingFilter === 'matched' && (!p.Contract || p.Contract === '')) return false;
                 if (parkingFilter === 'unmatched' && (p.Contract && p.Contract !== '')) return false;
+                if (parkingFilter === 'edited' && !p.manual_update) return false;
+
                 
                 const plateMatch = p.Plate_Number?.toString().toLowerCase().includes(search.toLowerCase());
                 const contractMatch = p.Contract?.toString().toLowerCase().includes(search.toLowerCase());
                 return plateMatch || contractMatch || !search;
-              }).map((p: any, index: number) => (
+              }).map((p: any, index: number) => {
+                const originalIndex = parkingData.indexOf(p);
+                return (
                 <tr key={index} style={{
-                  background: p.Contract ? (index % 2 === 0 ? "#FFFDE7" : "#fff") : "#FBE9E7",
+                  background: p.manual_update ? '#e8f5e9' : (p.Contract ? (index % 2 === 0 ? "#FFFDE7" : "#fff") : "#FBE9E7"),
                   transition: "background 0.2s",
                   borderBottom: "1px solid #f3e6b3"
                 }}>
@@ -188,7 +203,45 @@ const ParkingTable = ({
                     fontWeight: "bold",
                     color: p.Contract ? "#1976d2" : "#f44336",
                     fontSize: 12
-                  }}>{p.Contract || p.Contract_No || 'Switch'}</td>
+                  }}>
+                    {editingIndex === originalIndex ? (
+                        <input
+                            type="text"
+                            defaultValue={p.Contract || ''}
+                            onChange={(e) => setNewContract(e.target.value)}
+                            onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                updateParkingInfo(originalIndex, newContract);
+                                setEditingIndex(null);
+                            }
+                            }}
+                            onBlur={() => {
+                                setEditingIndex(null);
+                            }}
+                            autoFocus
+                        />
+                        ) : (
+                        <div>
+                            {p.Contract || 'N/A'}
+                            {(p.manual_update || !p.Contract) && 
+                                <button 
+                                    onClick={() => {
+                                    setEditingIndex(originalIndex);
+                                    setNewContract(p.Contract || '');
+                                    }} 
+                                    style={{
+                                    marginLeft: '5px', 
+                                    padding: '2px 5px', 
+                                    fontSize: '10px',
+                                    cursor: 'pointer'
+                                    }}
+                                >
+                                    {p.Contract ? 'Edit' : 'Add'}
+                                </button>
+                            }
+                        </div>
+                        )}
+                  </td>
                   {parkingType === 'invygo' ? (
                     <>
                       <td style={{ padding: "8px 4px", textAlign: "center", fontSize: 12 }}>{p.Dealer_Booking_Number}</td>
@@ -216,7 +269,8 @@ const ParkingTable = ({
                     {p.Contract_End === 'Open' ? 'Open' : (p.Contract_End ? formatDateTime(p.Contract_End) : '')}
                   </td>
                 </tr>
-              ))
+                )}
+              )
             ) : (
               <tr>
                 <td colSpan={parkingType === 'invygo' ? 13 : 14} style={{ textAlign: "center", color: "#888", padding: 24 }}>

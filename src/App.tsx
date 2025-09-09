@@ -16,6 +16,7 @@ export default function App() {
   const { 
     contracts,
     parkingData,
+    dealerBookings,
     invygoPlates,
     contractFileName,
     invygoFileName,
@@ -74,7 +75,7 @@ export default function App() {
   const [parkingType, setParkingType] = useState<'invygo' | 'yelo'>('invygo');
   const [showParkingDialog, setShowParkingDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
-  const [parkingFilter, setParkingFilter] = useState<'all' | 'matched' | 'unmatched'>('all');
+  const [parkingFilter, setParkingFilter] = useState<'all' | 'matched' | 'unmatched' | 'edited'>('all');
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -298,6 +299,75 @@ export default function App() {
     const normalizedPlate = plate.toString().replace(/\s/g, '').trim().toUpperCase();
     return invygoPlates.includes(normalizedPlate) && normalizedPlate.toLowerCase().includes(search.toLowerCase());
   });
+
+  const updateParkingInfo = (parkingIndex: number, contractNo: string) => {
+    const contractNoHeaderVal = findHeader(['Contract No.']);
+    const customerHeaderVal = findHeader(['Customer', 'Customer Name']);
+    const pickupHeaderVal = findHeader(['Pick-up Date', 'Pickup Date']);
+    const dropoffHeaderVal = findHeader(['Drop-off Date', 'Dropoff Date', 'Drop off Date']);
+    const statusHeaderVal = findHeader(['Status']);
+
+    if (!contractNoHeaderVal) {
+      alert("Cannot find 'Contract No.' header in the contracts file.");
+      return;
+    }
+
+    const contract = contracts.find((c: any) => c[contractNoHeaderVal] === contractNo);
+
+    if (contract) {
+      const newParkingData = [...parkingData];
+      const parkingItem = newParkingData[parkingIndex];
+
+      parkingItem.Contract = contract[contractNoHeaderVal];
+      
+      if (customerHeaderVal) {
+        parkingItem.Customer_Contract = contract[customerHeaderVal];
+      }
+      if (pickupHeaderVal) {
+        parkingItem.Contract_Start = contract[pickupHeaderVal];
+      }
+      if (dropoffHeaderVal) {
+        const status = statusHeaderVal ? contract[statusHeaderVal]?.toString().toLowerCase() : '';
+        if (status === 'open' || status === 'active') {
+          parkingItem.Contract_End = 'Open';
+        } else {
+          parkingItem.Contract_End = contract[dropoffHeaderVal];
+        }
+      }
+
+      const plateNumber = (parkingItem.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+      if (invygoPlates.includes(plateNumber)) {
+        const dealerBooking = dealerBookings.find((booking: any) => 
+          booking['Agreement']?.toString() === contractNo?.toString()
+        );
+        
+        if (dealerBooking) {
+          parkingItem.Dealer_Booking_Number = dealerBooking['Booking ID'];
+          parkingItem.Customer_Name = dealerBooking['Customer'] || dealerBooking['Customer Name'] || '';
+          
+          const brandName = dealerBooking['Brand Name'] || '';
+          const carName = dealerBooking['Car Name'] || '';
+          const carYear = dealerBooking['Car Year'] || '';
+          parkingItem.Model = [brandName, carName, carYear].filter(part => part).join(' ');
+        }
+      } else { // For YELO cars, get contract data directly
+        const bookingNumberHeader = findHeader(['Booking Number', 'Booking No', 'Booking ID']);
+        const pickupBranchHeader = findHeader(['Pick-up Branch', 'Pickup Branch', 'Branch']);
+        const modelHeaderContract = findHeader(['Model', 'Car Model', 'Vehicle Model']);
+        
+        if(bookingNumberHeader) parkingItem.Booking_Number = contract[bookingNumberHeader] || '';
+        if(pickupBranchHeader) parkingItem.Pickup_Branch = contract[pickupBranchHeader] || '';
+        if(modelHeaderContract) parkingItem.Model_Contract = contract[modelHeaderContract] || '';
+      }
+      
+      // Manually added flag
+      parkingItem.manual_update = true;
+
+      setParkingData(newParkingData);
+    } else {
+      alert(`Contract with number "${contractNo}" not found.`);
+    }
+  };
 
   // Auto-filter contracts when contracts, invygoPlates, startDate, or endDate change
   useEffect(() => {
@@ -578,7 +648,7 @@ export default function App() {
             {view === 'contracts' && <ContractsTable contractsToShow={contractsToShow} invygoSummary={invygoSummary} setInvygoFilter={setInvygoFilter} invygoFilter={invygoFilter} setSelectedContract={setSelectedContract} contractNoHeader={contractNoHeader} customerHeader={customerHeader} plateNoHeader={plateNoHeader} pickupHeader={pickupHeader} dropoffHeader={dropoffHeader} findHeader={findHeader} />}
             {view === 'unrented' && <UnrentedTable unrentedToShow={unrentedToShow} />}
             {view === 'repeated' && <RepeatedTable repeatedToShow={repeatedToShow} setSelectedContract={setSelectedContract} contractNoHeader={contractNoHeader} />}
-            {view === 'parking' && <ParkingTable parkingData={parkingData} parkingType={parkingType} setParkingFilter={setParkingFilter} parkingFilter={parkingFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} />}
+            {view === 'parking' && <ParkingTable parkingData={parkingData} parkingType={parkingType} setParkingFilter={setParkingFilter} parkingFilter={parkingFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateParkingInfo={updateParkingInfo} />}
           </>
         )}
 
@@ -587,7 +657,7 @@ export default function App() {
             {view === 'contracts' && <ContractsTable contractsToShow={contractsToShow} invygoSummary={invygoSummary} setInvygoFilter={setInvygoFilter} invygoFilter={invygoFilter} setSelectedContract={setSelectedContract} contractNoHeader={contractNoHeader} customerHeader={customerHeader} plateNoHeader={plateNoHeader} pickupHeader={pickupHeader} dropoffHeader={dropoffHeader} findHeader={findHeader} />}
             {view === 'unrented' && <UnrentedTable unrentedToShow={unrentedToShow} />}
             {view === 'repeated' && <RepeatedTable repeatedToShow={repeatedToShow} setSelectedContract={setSelectedContract} contractNoHeader={contractNoHeader} />}
-            {view === 'parking' && <ParkingTable parkingData={parkingData} parkingType={parkingType} setParkingFilter={setParkingFilter} parkingFilter={parkingFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} />}
+            {view === 'parking' && <ParkingTable parkingData={parkingData} parkingType={parkingType} setParkingFilter={setParkingFilter} parkingFilter={parkingFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateParkingInfo={updateParkingInfo} />}
           </>
         )}
 
