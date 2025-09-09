@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { formatDate, formatDateTime } from '../utils/dates';
 
@@ -11,6 +10,18 @@ const ParkingTable = ({
     search, 
     copyToClipboard 
 }: any) => {
+
+    const typedParkingData = parkingData.filter((p: any) => {
+        const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+        const isCorrectType = parkingType === 'invygo' ? invygoPlates.includes(plateNumber) : !invygoPlates.includes(plateNumber);
+        return isCorrectType;
+    });
+
+    const totalAmount = typedParkingData.reduce((acc: number, p: any) => acc + Number(p.Amount || 0), 0);
+
+    const matchedParking = typedParkingData.filter((p: any) => p.Contract);
+    const unmatchedParking = typedParkingData.filter((p: any) => !p.Contract);
+
     return (
         <div>
       <h2 style={{
@@ -36,25 +47,31 @@ const ParkingTable = ({
         color: "#5d1789",
         display: "inline-block"
       }}>
+        Total Amount: {totalAmount.toFixed(2)} AED
+      </div>
+      <div style={{
+        margin: "16px 0",
+        padding: "12px 24px",
+        background: "#fff8dc",
+        border: "2px dashed #FFD600",
+        borderRadius: 12,
+        fontWeight: "bold",
+        fontSize: 18,
+        color: "#5d1789",
+        display: "inline-block",
+        marginLeft: "10px"
+      }}>
         ✅ Matched: <span 
           onClick={() => setParkingFilter('matched')} 
           style={{color: "#388e3c", cursor: 'pointer', textDecoration: 'underline'}}
         >
-          {parkingData.filter((p: any) => {
-            const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
-            const isCorrectType = parkingType === 'invygo' ? invygoPlates.includes(plateNumber) : !invygoPlates.includes(plateNumber);
-            return isCorrectType && p.Contract;
-          }).length}
+          {matchedParking.length}
         </span> &nbsp; | &nbsp;
         ❌ Unmatched: <span 
           onClick={() => setParkingFilter('unmatched')} 
           style={{color: "#f44336", cursor: 'pointer', textDecoration: 'underline'}}
         >
-          {parkingData.filter((p: any) => {
-            const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
-            const isCorrectType = parkingType === 'invygo' ? invygoPlates.includes(plateNumber) : !invygoPlates.includes(plateNumber);
-            return isCorrectType && !p.Contract;
-          }).length}
+          {unmatchedParking.length}
         </span>
         {parkingFilter !== 'all' && (
           <span onClick={() => setParkingFilter('all')} style={{cursor: 'pointer', textDecoration: 'underline', marginLeft: '10px'}}> (Show All)</span>
