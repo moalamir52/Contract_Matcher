@@ -268,6 +268,7 @@ export default function App() {
   const customerHeader = findHeader(['Customer']);
   const pickupHeader = findHeader(['Pick-up Date', 'Pickup Date']);
   const dropoffHeader = findHeader(['Drop-off Date', 'Dropoff Date', 'Drop off Date']);
+  const statusHeader = findHeader(['Status']);
 
   const searched = filtered.filter((c: any) => {
     const plateMatch = plateNoHeader && c[plateNoHeader]?.toString().toLowerCase().includes(search.toLowerCase());
@@ -295,9 +296,18 @@ export default function App() {
     plate.toLowerCase().includes(search.toLowerCase())
   );
 
-  const repeatedToShow = repeatedContracts.filter(([plate]: [string]) => {
+  const repeatedToShow = repeatedContracts.filter(([plate, rows]: [string, any[]]) => {
     const normalizedPlate = plate.toString().replace(/\s/g, '').trim().toUpperCase();
-    return invygoPlates.includes(normalizedPlate) && normalizedPlate.toLowerCase().includes(search.toLowerCase());
+    const plateMatch = normalizedPlate.toLowerCase().includes(search.toLowerCase());
+    
+    // البحث في أسماء العملاء
+    const customerMatch = rows.some((contract: any) => {
+      const customerName = customerHeader ? contract[customerHeader]?.toString().toLowerCase() : '';
+      const contractNo = contractNoHeader ? contract[contractNoHeader]?.toString().toLowerCase() : '';
+      return customerName.includes(search.toLowerCase()) || contractNo.includes(search.toLowerCase());
+    });
+    
+    return invygoPlates.includes(normalizedPlate) && (plateMatch || customerMatch || !search);
   });
 
   const updateParkingInfo = (parkingIndex: number, contractNo: string) => {
@@ -647,7 +657,7 @@ export default function App() {
           <>
             {view === 'contracts' && <ContractsTable contractsToShow={contractsToShow} invygoSummary={invygoSummary} setInvygoFilter={setInvygoFilter} invygoFilter={invygoFilter} setSelectedContract={setSelectedContract} contractNoHeader={contractNoHeader} customerHeader={customerHeader} plateNoHeader={plateNoHeader} pickupHeader={pickupHeader} dropoffHeader={dropoffHeader} findHeader={findHeader} />}
             {view === 'unrented' && <UnrentedTable unrentedToShow={unrentedToShow} />}
-            {view === 'repeated' && <RepeatedTable repeatedToShow={repeatedToShow} setSelectedContract={setSelectedContract} contractNoHeader={contractNoHeader} />}
+            {view === 'repeated' && <RepeatedTable repeatedToShow={repeatedToShow} setSelectedContract={setSelectedContract} contractNoHeader={contractNoHeader} customerHeader={customerHeader} pickupHeader={pickupHeader} dropoffHeader={dropoffHeader} statusHeader={statusHeader} />}
             {view === 'parking' && <ParkingTable parkingData={parkingData} parkingType={parkingType} setParkingFilter={setParkingFilter} parkingFilter={parkingFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateParkingInfo={updateParkingInfo} />}
           </>
         )}
@@ -656,7 +666,7 @@ export default function App() {
           <>
             {view === 'contracts' && <ContractsTable contractsToShow={contractsToShow} invygoSummary={invygoSummary} setInvygoFilter={setInvygoFilter} invygoFilter={invygoFilter} setSelectedContract={setSelectedContract} contractNoHeader={contractNoHeader} customerHeader={customerHeader} plateNoHeader={plateNoHeader} pickupHeader={pickupHeader} dropoffHeader={dropoffHeader} findHeader={findHeader} />}
             {view === 'unrented' && <UnrentedTable unrentedToShow={unrentedToShow} />}
-            {view === 'repeated' && <RepeatedTable repeatedToShow={repeatedToShow} setSelectedContract={setSelectedContract} contractNoHeader={contractNoHeader} />}
+            {view === 'repeated' && <RepeatedTable repeatedToShow={repeatedToShow} setSelectedContract={setSelectedContract} contractNoHeader={contractNoHeader} customerHeader={customerHeader} pickupHeader={pickupHeader} dropoffHeader={dropoffHeader} statusHeader={statusHeader} />}
             {view === 'parking' && <ParkingTable parkingData={parkingData} parkingType={parkingType} setParkingFilter={setParkingFilter} parkingFilter={parkingFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateParkingInfo={updateParkingInfo} />}
           </>
         )}
