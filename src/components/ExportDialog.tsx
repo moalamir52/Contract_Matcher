@@ -204,7 +204,13 @@ const ExportDialog = ({
                       
                       let suffix = '';
                       if (view === 'contracts') {
-                        suffix = invygoFilter === 'invygo' ? 'invygo' : invygoFilter === 'other' ? 'other' : 'all';
+                        if (invygoFilter === 'invygo') suffix = 'invygo';
+                        else if (invygoFilter === 'other') suffix = 'other';
+                        else if (invygoFilter === 'invygo-open') suffix = 'invygo_open';
+                        else if (invygoFilter === 'invygo-closed') suffix = 'invygo_closed';
+                        else if (invygoFilter === 'other-open') suffix = 'other_open';
+                        else if (invygoFilter === 'other-closed') suffix = 'other_closed';
+                        else suffix = 'all';
                       } else if (view === 'unrented') {
                         suffix = 'unrented';
                       } else if (view === 'repeated') {

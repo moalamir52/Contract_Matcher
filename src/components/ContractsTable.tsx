@@ -31,19 +31,58 @@ const ContractsTable = ({
       </h2>
       <div style={{
         margin: "32px 0 16px",
-        padding: "12px 24px",
-        background: "#fff8dc",
-        border: "2px dashed #FFD600",
-        borderRadius: 12,
-        fontWeight: "bold",
-        fontSize: 18,
-        color: "#5d1789",
         display: "inline-block"
       }}>
-        ✅ Invygo Contracts: <span onClick={() => setInvygoFilter('invygo')} style={{cursor: 'pointer', textDecoration: 'underline'}}> {invygoSummary.invygoCount}</span> &nbsp; | &nbsp;
-        ❌ Other Contracts: <span onClick={() => setInvygoFilter('other')} style={{cursor: 'pointer', textDecoration: 'underline'}}> {invygoSummary.nonInvygoCount}</span>
+        <table style={{
+          background: "#fff8dc",
+          border: "2px solid #FFD600",
+          borderRadius: 12,
+          borderCollapse: "separate",
+          borderSpacing: 0,
+          fontWeight: "bold",
+          fontSize: 16,
+          color: "#5d1789",
+          overflow: "hidden"
+        }}>
+          <thead>
+            <tr style={{background: "#FFD600"}}>
+              <th style={{padding: "8px 16px", textAlign: "center", color: "#222"}}>Type</th>
+              <th style={{padding: "8px 16px", textAlign: "center", color: "#222"}}>Total</th>
+              <th style={{padding: "8px 16px", textAlign: "center", color: "#222"}}>🟢 Open</th>
+              <th style={{padding: "8px 16px", textAlign: "center", color: "#222"}}>🔴 Closed</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style={{padding: "8px 16px", textAlign: "center"}}>✅ Invygo</td>
+              <td style={{padding: "8px 16px", textAlign: "center"}}>
+                <span onClick={() => setInvygoFilter('invygo')} style={{cursor: 'pointer', textDecoration: 'underline'}}>{invygoSummary.invygoCount}</span>
+              </td>
+              <td style={{padding: "8px 16px", textAlign: "center"}}>
+                <span onClick={() => setInvygoFilter('invygo-open')} style={{color: '#4caf50', cursor: 'pointer', textDecoration: 'underline'}}>{invygoSummary.invygoOpenCount}</span>
+              </td>
+              <td style={{padding: "8px 16px", textAlign: "center"}}>
+                <span onClick={() => setInvygoFilter('invygo-closed')} style={{color: '#f44336', cursor: 'pointer', textDecoration: 'underline'}}>{invygoSummary.invygoClosedCount}</span>
+              </td>
+            </tr>
+            <tr style={{background: "#fff"}}>
+              <td style={{padding: "8px 16px", textAlign: "center"}}>❌ Other</td>
+              <td style={{padding: "8px 16px", textAlign: "center"}}>
+                <span onClick={() => setInvygoFilter('other')} style={{cursor: 'pointer', textDecoration: 'underline'}}>{invygoSummary.nonInvygoCount}</span>
+              </td>
+              <td style={{padding: "8px 16px", textAlign: "center"}}>
+                <span onClick={() => setInvygoFilter('other-open')} style={{color: '#4caf50', cursor: 'pointer', textDecoration: 'underline'}}>{invygoSummary.otherOpenCount}</span>
+              </td>
+              <td style={{padding: "8px 16px", textAlign: "center"}}>
+                <span onClick={() => setInvygoFilter('other-closed')} style={{color: '#f44336', cursor: 'pointer', textDecoration: 'underline'}}>{invygoSummary.otherClosedCount}</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
         {invygoFilter !== 'all' && (
-          <span onClick={() => setInvygoFilter('all')} style={{cursor: 'pointer', textDecoration: 'underline', marginLeft: '10px'}}> (Show All)</span>
+          <div style={{marginTop: '8px', textAlign: 'center'}}>
+            <span onClick={() => setInvygoFilter('all')} style={{cursor: 'pointer', textDecoration: 'underline', color: '#673ab7', fontWeight: 'bold'}}>(Show All)</span>
+          </div>
         )}
       </div>
       <div style={{

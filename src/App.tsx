@@ -60,7 +60,7 @@ export default function App() {
     setShowTemplateDialog(false);
   };
   const [view, setView] = useState<'contracts' | 'unrented' | 'repeated' | 'parking'>('contracts');
-  const [invygoFilter, setInvygoFilter] = useState<'all' | 'invygo' | 'other'>('all');
+  const [invygoFilter, setInvygoFilter] = useState<'all' | 'invygo' | 'other' | 'invygo-open' | 'invygo-closed' | 'other-open' | 'other-closed'>('all');
   const [filtered, setFiltered] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -69,7 +69,7 @@ export default function App() {
   const [unrentedPlates, setUnrentedPlates] = useState<string[]>([]);
   const [repeatedContracts, setRepeatedContracts] = useState<any[]>([]);
   const modalRef = useRef(null);
-  const [invygoSummary, setInvygoSummary] = useState({ invygoCount: 0, nonInvygoCount: 0 });
+  const [invygoSummary, setInvygoSummary] = useState({ invygoCount: 0, nonInvygoCount: 0, openCount: 0, closedCount: 0, invygoOpenCount: 0, invygoClosedCount: 0, otherOpenCount: 0, otherClosedCount: 0 });
   const [showCopyDialog, setShowCopyDialog] = useState(false);
   const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
   const [parkingType, setParkingType] = useState<'invygo' | 'yelo'>('invygo');
@@ -194,7 +194,20 @@ export default function App() {
   }, []);
 
   const filterContracts = () => {
-    if (!startDate || !endDate) return;
+    if (!startDate || !endDate) {
+      alert('Please select both start and end dates.');
+      return;
+    }
+
+    if (startDate.length !== 10 || endDate.length !== 10) {
+      alert('Please complete the date selection.');
+      return;
+    }
+
+    if (!contracts.length) {
+      alert('Please upload a contracts file first.');
+      return;
+    }
 
     const startParts = startDate.split('-');
     const start = new Date(Date.UTC(Number(startParts[0]), Number(startParts[1]) - 1, Number(startParts[2])));
@@ -239,7 +252,29 @@ export default function App() {
 
     const invygoCount = result.filter(c => c.invygoListed).length;
     const nonInvygoCount = result.length - invygoCount;
-    setInvygoSummary({ invygoCount, nonInvygoCount });
+    
+    // حساب العقود المفتوحة والمغلقة
+    const openCount = result.filter(c => {
+      const status = statusHeader ? c[statusHeader]?.toString().toLowerCase() : '';
+      return status === 'open' || status === 'active';
+    }).length;
+    const closedCount = result.length - openCount;
+    
+    // حساب العقود المفتوحة والمغلقة للإنفيجو
+    const invygoOpenCount = result.filter(c => {
+      const status = statusHeader ? c[statusHeader]?.toString().toLowerCase() : '';
+      return c.invygoListed && (status === 'open' || status === 'active');
+    }).length;
+    const invygoClosedCount = invygoCount - invygoOpenCount;
+    
+    // حساب العقود المفتوحة والمغلقة للأخرى
+    const otherOpenCount = result.filter(c => {
+      const status = statusHeader ? c[statusHeader]?.toString().toLowerCase() : '';
+      return !c.invygoListed && (status === 'open' || status === 'active');
+    }).length;
+    const otherClosedCount = nonInvygoCount - otherOpenCount;
+    
+    setInvygoSummary({ invygoCount, nonInvygoCount, openCount, closedCount, invygoOpenCount, invygoClosedCount, otherOpenCount, otherClosedCount });
 
     const rentedPlates = new Set(result.map((c: any) => {
         const plateValue = plateNoHeader ? (c[plateNoHeader] || '') : '';
@@ -288,6 +323,22 @@ export default function App() {
     }
     if (invygoFilter === 'other') {
       return !c.invygoListed;
+    }
+    if (invygoFilter === 'invygo-open') {
+      const status = statusHeader ? c[statusHeader]?.toString().toLowerCase() : '';
+      return c.invygoListed && (status === 'open' || status === 'active');
+    }
+    if (invygoFilter === 'invygo-closed') {
+      const status = statusHeader ? c[statusHeader]?.toString().toLowerCase() : '';
+      return c.invygoListed && !(status === 'open' || status === 'active');
+    }
+    if (invygoFilter === 'other-open') {
+      const status = statusHeader ? c[statusHeader]?.toString().toLowerCase() : '';
+      return !c.invygoListed && (status === 'open' || status === 'active');
+    }
+    if (invygoFilter === 'other-closed') {
+      const status = statusHeader ? c[statusHeader]?.toString().toLowerCase() : '';
+      return !c.invygoListed && !(status === 'open' || status === 'active');
     }
     return true; // 'all' filter
   });
@@ -381,7 +432,7 @@ export default function App() {
 
   // Auto-filter contracts when contracts, invygoPlates, startDate, or endDate change
   useEffect(() => {
-    if (contracts.length > 0 && invygoPlates.length > 0 && startDate && endDate) {
+    if (contracts.length > 0 && invygoPlates.length > 0 && startDate && endDate && startDate.length === 10 && endDate.length === 10) {
       filterContracts();
     }
     // eslint-disable-next-line
@@ -475,7 +526,7 @@ export default function App() {
               setUnrentedPlates([]);
               setRepeatedContracts([]);
               setParkingData([]);
-              setInvygoSummary({ invygoCount: 0, nonInvygoCount: 0 });
+              setInvygoSummary({ invygoCount: 0, nonInvygoCount: 0, openCount: 0, closedCount: 0, invygoOpenCount: 0, invygoClosedCount: 0, otherOpenCount: 0, otherClosedCount: 0 });
             }}
             style={{
               background: "#fff",
