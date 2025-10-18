@@ -20,7 +20,8 @@ const ExportDialog = ({
     pickupHeader,
     dropoffHeader,
     contractsToShow,
-    invygoFilter
+    invygoFilter,
+    selectedRows
 }: any) => {
     if (!showExportDialog) return null;
 
@@ -68,18 +69,23 @@ const ExportDialog = ({
                     <>
                       <button
                         onClick={() => {
-                          const parkingToShow = parkingData.filter((p: any) => {
-                            const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
-                            const isInvygoCar = invygoPlates.includes(plateNumber);
-                            if (!isInvygoCar) return false;
-                            
-                            if (parkingFilter === 'matched' && (!p.Contract || p.Contract === '')) return false;
-                            if (parkingFilter === 'unmatched' && (p.Contract && p.Contract !== '')) return false;
-                            
-                            const plateMatch = p.Plate_Number?.toString().toLowerCase().includes(search.toLowerCase());
-                            const contractMatch = p.Contract?.toString().toLowerCase().includes(search.toLowerCase());
-                            return plateMatch || contractMatch || !search;
-                          });
+                          let parkingToShow;
+                          if (selectedRows && selectedRows.size > 0) {
+                            parkingToShow = Array.from(selectedRows).map((value) => parkingData[value as number]);
+                          } else {
+                            parkingToShow = parkingData.filter((p: any) => {
+                              const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+                              const isInvygoCar = invygoPlates.includes(plateNumber);
+                              if (!isInvygoCar) return false;
+                              
+                              if (parkingFilter === 'matched' && (!p.Contract || p.Contract === '')) return false;
+                              if (parkingFilter === 'unmatched' && (p.Contract && p.Contract !== '')) return false;
+                              
+                              const plateMatch = p.Plate_Number?.toString().toLowerCase().includes(search.toLowerCase());
+                              const contractMatch = p.Contract?.toString().toLowerCase().includes(search.toLowerCase());
+                              return plateMatch || contractMatch || !search;
+                            });
+                          }
                           
                           const dataToExport = parkingToShow.map((p: any) => ({
                             'Plate_Number': p.Plate_Number || '',
@@ -102,18 +108,23 @@ const ExportDialog = ({
                       </button>
                       <button
                         onClick={() => {
-                          const parkingToShow = parkingData.filter((p: any) => {
-                            const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
-                            const isInvygoCar = invygoPlates.includes(plateNumber);
-                            if (!isInvygoCar) return false;
-                            
-                            if (parkingFilter === 'matched' && (!p.Contract || p.Contract === '')) return false;
-                            if (parkingFilter === 'unmatched' && (p.Contract && p.Contract !== '')) return false;
-                            
-                            const plateMatch = p.Plate_Number?.toString().toLowerCase().includes(search.toLowerCase());
-                            const contractMatch = p.Contract?.toString().toLowerCase().includes(search.toLowerCase());
-                            return plateMatch || contractMatch || !search;
-                          });
+                          let parkingToShow;
+                          if (selectedRows && selectedRows.size > 0) {
+                            parkingToShow = Array.from(selectedRows).map((value) => parkingData[value as number]);
+                          } else {
+                            parkingToShow = parkingData.filter((p: any) => {
+                              const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+                              const isInvygoCar = invygoPlates.includes(plateNumber);
+                              if (!isInvygoCar) return false;
+                              
+                              if (parkingFilter === 'matched' && (!p.Contract || p.Contract === '')) return false;
+                              if (parkingFilter === 'unmatched' && (p.Contract && p.Contract !== '')) return false;
+                              
+                              const plateMatch = p.Plate_Number?.toString().toLowerCase().includes(search.toLowerCase());
+                              const contractMatch = p.Contract?.toString().toLowerCase().includes(search.toLowerCase());
+                              return plateMatch || contractMatch || !search;
+                            });
+                          }
                           
                           const dataToExport = parkingToShow.map((p: any) => ({
                             'Contract': p.Contract || '',
@@ -142,18 +153,23 @@ const ExportDialog = ({
                   ) : (
                     <button
                       onClick={() => {
-                        const parkingToShow = parkingData.filter((p: any) => {
-                          const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
-                          const isInvygoCar = invygoPlates.includes(plateNumber);
-                          if (isInvygoCar) return false;
-                          
-                          if (parkingFilter === 'matched' && (!p.Contract || p.Contract === '')) return false;
-                          if (parkingFilter === 'unmatched' && (p.Contract && p.Contract !== '')) return false;
-                          
-                          const plateMatch = p.Plate_Number?.toString().toLowerCase().includes(search.toLowerCase());
-                          const contractMatch = p.Contract?.toString().toLowerCase().includes(search.toLowerCase());
-                          return plateMatch || contractMatch || !search;
-                        });
+                        let parkingToShow;
+                        if (selectedRows && selectedRows.size > 0) {
+                          parkingToShow = Array.from(selectedRows).map((value) => parkingData[value as number]);
+                        } else {
+                          parkingToShow = parkingData.filter((p: any) => {
+                            const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+                            const isInvygoCar = invygoPlates.includes(plateNumber);
+                            if (isInvygoCar) return false;
+                            
+                            if (parkingFilter === 'matched' && (!p.Contract || p.Contract === '')) return false;
+                            if (parkingFilter === 'unmatched' && (p.Contract && p.Contract !== '')) return false;
+                            
+                            const plateMatch = p.Plate_Number?.toString().toLowerCase().includes(search.toLowerCase());
+                            const contractMatch = p.Contract?.toString().toLowerCase().includes(search.toLowerCase());
+                            return plateMatch || contractMatch || !search;
+                          });
+                        }
                         
                         const dataToExport = parkingToShow.map((p: any) => ({
                             'Plate_Number': p.Plate_Number || '',

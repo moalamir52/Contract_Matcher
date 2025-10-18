@@ -76,6 +76,7 @@ export default function App() {
   const [showParkingDialog, setShowParkingDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [parkingFilter, setParkingFilter] = useState<'all' | 'matched' | 'unmatched' | 'edited'>('all');
+  const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -411,7 +412,7 @@ export default function App() {
           const carYear = dealerBooking['Car Year'] || '';
           parkingItem.Model = [brandName, carName, carYear].filter(part => part).join(' ');
         }
-      } else { // For YELO cars, get contract data directly
+      } else {
         const bookingNumberHeader = findHeader(['Booking Number', 'Booking No', 'Booking ID']);
         const pickupBranchHeader = findHeader(['Pick-up Branch', 'Pickup Branch', 'Branch']);
         const modelHeaderContract = findHeader(['Model', 'Car Model', 'Vehicle Model']);
@@ -421,14 +422,14 @@ export default function App() {
         if(modelHeaderContract) parkingItem.Model_Contract = contract[modelHeaderContract] || '';
       }
       
-      // Manually added flag
       parkingItem.manual_update = true;
-
       setParkingData(newParkingData);
     } else {
       alert(`Contract with number "${contractNo}" not found.`);
     }
   };
+
+
 
   // Auto-filter contracts when contracts, invygoPlates, startDate, or endDate change
   useEffect(() => {
@@ -629,13 +630,13 @@ export default function App() {
           <FileUploadButton
             title="Upload Contracts File"
             onUpload={handleFileUpload}
-            accept=".xlsx, .xls"
+            accept=".xlsx, .xls, .csv"
             fileName={contractFileName}
           />
           <FileUploadButton
             title="Upload Invygo Cars"
             onUpload={handleInvygoUpload}
-            accept=".xlsx, .xls"
+            accept=".xlsx, .xls, .csv"
             fileName={invygoFileName}
           />
           <FileUploadButton
@@ -709,7 +710,7 @@ export default function App() {
             {view === 'contracts' && <ContractsTable contractsToShow={contractsToShow} invygoSummary={invygoSummary} setInvygoFilter={setInvygoFilter} invygoFilter={invygoFilter} setSelectedContract={setSelectedContract} contractNoHeader={contractNoHeader} customerHeader={customerHeader} plateNoHeader={plateNoHeader} pickupHeader={pickupHeader} dropoffHeader={dropoffHeader} findHeader={findHeader} />}
             {view === 'unrented' && <UnrentedTable unrentedToShow={unrentedToShow} />}
             {view === 'repeated' && <RepeatedTable repeatedToShow={repeatedToShow} setSelectedContract={setSelectedContract} contractNoHeader={contractNoHeader} customerHeader={customerHeader} pickupHeader={pickupHeader} dropoffHeader={dropoffHeader} statusHeader={statusHeader} />}
-            {view === 'parking' && <ParkingTable parkingData={parkingData} parkingType={parkingType} setParkingFilter={setParkingFilter} parkingFilter={parkingFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateParkingInfo={updateParkingInfo} />}
+            {view === 'parking' && <ParkingTable parkingData={parkingData} parkingType={parkingType} setParkingFilter={setParkingFilter} parkingFilter={parkingFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateParkingInfo={updateParkingInfo} selectedRows={selectedRows} setSelectedRows={setSelectedRows} />}
           </>
         )}
 
@@ -718,7 +719,7 @@ export default function App() {
             {view === 'contracts' && <ContractsTable contractsToShow={contractsToShow} invygoSummary={invygoSummary} setInvygoFilter={setInvygoFilter} invygoFilter={invygoFilter} setSelectedContract={setSelectedContract} contractNoHeader={contractNoHeader} customerHeader={customerHeader} plateNoHeader={plateNoHeader} pickupHeader={pickupHeader} dropoffHeader={dropoffHeader} findHeader={findHeader} />}
             {view === 'unrented' && <UnrentedTable unrentedToShow={unrentedToShow} />}
             {view === 'repeated' && <RepeatedTable repeatedToShow={repeatedToShow} setSelectedContract={setSelectedContract} contractNoHeader={contractNoHeader} customerHeader={customerHeader} pickupHeader={pickupHeader} dropoffHeader={dropoffHeader} statusHeader={statusHeader} />}
-            {view === 'parking' && <ParkingTable parkingData={parkingData} parkingType={parkingType} setParkingFilter={setParkingFilter} parkingFilter={parkingFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateParkingInfo={updateParkingInfo} />}
+            {view === 'parking' && <ParkingTable parkingData={parkingData} parkingType={parkingType} setParkingFilter={setParkingFilter} parkingFilter={parkingFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateParkingInfo={updateParkingInfo} selectedRows={selectedRows} setSelectedRows={setSelectedRows} />}
           </>
         )}
 
@@ -749,6 +750,7 @@ export default function App() {
           dropoffHeader={dropoffHeader} 
           contractsToShow={view === 'unrented' ? unrentedToShow : view === 'repeated' ? repeatedToShow : contractsToShow} 
           invygoFilter={invygoFilter} 
+          selectedRows={selectedRows}
         />
 
         <CopyDialog 

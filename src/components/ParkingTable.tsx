@@ -9,7 +9,9 @@ const ParkingTable = ({
     invygoPlates, 
     search, 
     copyToClipboard,
-    updateParkingInfo
+    updateParkingInfo,
+    selectedRows,
+    setSelectedRows
 }: any) => {
 
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -23,8 +25,20 @@ const ParkingTable = ({
 
     const totalAmount = typedParkingData.reduce((acc: number, p: any) => acc + Number(p.Amount || 0), 0);
 
-    const matchedParking = typedParkingData.filter((p: any) => p.Contract);
-    const unmatchedParking = typedParkingData.filter((p: any) => !p.Contract);
+    const matchedParking = typedParkingData.filter((p: any) => {
+        if (parkingType === 'invygo') {
+            return p.Contract && p.Dealer_Booking_Number && p.Customer_Name;
+        } else {
+            return p.Contract && p.Customer_Contract;
+        }
+    });
+    const unmatchedParking = typedParkingData.filter((p: any) => {
+        if (parkingType === 'invygo') {
+            return !p.Contract || !p.Dealer_Booking_Number || !p.Customer_Name;
+        } else {
+            return !p.Contract || !p.Customer_Contract;
+        }
+    });
     const editedParking = typedParkingData.filter((p: any) => p.manual_update);
 
     return (
@@ -88,6 +102,7 @@ const ParkingTable = ({
           <span onClick={() => setParkingFilter('all')} style={{cursor: 'pointer', textDecoration: 'underline', marginLeft: '10px'}}> (Show All)</span>
         )}
       </div>
+
       <div style={{
         background: "#fff",
         borderRadius: 18,
@@ -112,7 +127,75 @@ const ParkingTable = ({
               fontSize: 16,
               boxShadow: "0 2px 8px #FFD60055"
             }}>
-              <th style={{ padding: "10px 4px", borderTopLeftRadius: 18, borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>#</th>
+              <th style={{ padding: "10px 4px", borderTopLeftRadius: 18, borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>
+                <input 
+                  type="checkbox" 
+                  checked={selectedRows.size > 0 && selectedRows.size === parkingData.filter((p: any) => {
+                    const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+                    if (parkingType === 'invygo') {
+                      const isInvygoCar = invygoPlates.includes(plateNumber);
+                      if (!isInvygoCar) return false;
+                    } else {
+                      const isInvygoCar = invygoPlates.includes(plateNumber);
+                      if (isInvygoCar) return false;
+                    }
+                    if (parkingFilter === 'matched') {
+                      if (parkingType === 'invygo') {
+                        if (!p.Contract || !p.Dealer_Booking_Number || !p.Customer_Name) return false;
+                      } else {
+                        if (!p.Contract || !p.Customer_Contract) return false;
+                      }
+                    }
+                    if (parkingFilter === 'unmatched') {
+                      if (parkingType === 'invygo') {
+                        if (p.Contract && p.Dealer_Booking_Number && p.Customer_Name) return false;
+                      } else {
+                        if (p.Contract && p.Customer_Contract) return false;
+                      }
+                    }
+                    if (parkingFilter === 'edited' && !p.manual_update) return false;
+                    const plateMatch = p.Plate_Number?.toString().toLowerCase().includes(search.toLowerCase());
+                    const contractMatch = p.Contract?.toString().toLowerCase().includes(search.toLowerCase());
+                    return plateMatch || contractMatch || !search;
+                  }).length}
+                  onChange={(e) => {
+                    const visibleRows = parkingData.map((p: any, index: number) => ({ p, index })).filter(({ p }: any) => {
+                      const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+                      if (parkingType === 'invygo') {
+                        const isInvygoCar = invygoPlates.includes(plateNumber);
+                        if (!isInvygoCar) return false;
+                      } else {
+                        const isInvygoCar = invygoPlates.includes(plateNumber);
+                        if (isInvygoCar) return false;
+                      }
+                      if (parkingFilter === 'matched') {
+                        if (parkingType === 'invygo') {
+                          if (!p.Contract || !p.Dealer_Booking_Number || !p.Customer_Name) return false;
+                        } else {
+                          if (!p.Contract || !p.Customer_Contract) return false;
+                        }
+                      }
+                      if (parkingFilter === 'unmatched') {
+                        if (parkingType === 'invygo') {
+                          if (p.Contract && p.Dealer_Booking_Number && p.Customer_Name) return false;
+                        } else {
+                          if (p.Contract && p.Customer_Contract) return false;
+                        }
+                      }
+                      if (parkingFilter === 'edited' && !p.manual_update) return false;
+                      const plateMatch = p.Plate_Number?.toString().toLowerCase().includes(search.toLowerCase());
+                      const contractMatch = p.Contract?.toString().toLowerCase().includes(search.toLowerCase());
+                      return plateMatch || contractMatch || !search;
+                    });
+                    const newSelected = new Set<number>();
+                    if (e.target.checked) {
+                      visibleRows.forEach(({ index }: any) => newSelected.add(index));
+                    }
+                    setSelectedRows(newSelected);
+                  }}
+                />
+              </th>
+              <th style={{ padding: "10px 4px", borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>#</th>
               <th style={{ padding: "10px 4px", borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Plate Number</th>
               <th style={{ padding: "10px 4px", borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Date</th>
               <th style={{ padding: "10px 4px", borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Time</th>
@@ -154,8 +237,20 @@ const ParkingTable = ({
                 }
                 
                 // Apply parking filter
-                if (parkingFilter === 'matched' && (!p.Contract || p.Contract === '')) return false;
-                if (parkingFilter === 'unmatched' && (p.Contract && p.Contract !== '')) return false;
+                if (parkingFilter === 'matched') {
+                    if (parkingType === 'invygo') {
+                        if (!p.Contract || !p.Dealer_Booking_Number || !p.Customer_Name) return false;
+                    } else {
+                        if (!p.Contract || !p.Customer_Contract) return false;
+                    }
+                }
+                if (parkingFilter === 'unmatched') {
+                    if (parkingType === 'invygo') {
+                        if (p.Contract && p.Dealer_Booking_Number && p.Customer_Name) return false;
+                    } else {
+                        if (p.Contract && p.Customer_Contract) return false;
+                    }
+                }
                 if (parkingFilter === 'edited' && !p.manual_update) return false;
 
                 
@@ -170,6 +265,21 @@ const ParkingTable = ({
                   transition: "background 0.2s",
                   borderBottom: "1px solid #f3e6b3"
                 }}>
+                  <td style={{ padding: "8px 4px", textAlign: "center" }}>
+                    <input 
+                      type="checkbox" 
+                      checked={selectedRows.has(originalIndex)}
+                      onChange={(e) => {
+                        const newSelected = new Set(selectedRows);
+                        if (e.target.checked) {
+                          newSelected.add(originalIndex);
+                        } else {
+                          newSelected.delete(originalIndex);
+                        }
+                        setSelectedRows(newSelected);
+                      }}
+                    />
+                  </td>
                   <td style={{ padding: "8px 4px", textAlign: "center", color: "#888", fontWeight: "bold", fontSize: 12 }}>{index + 1}</td>
                   <td 
                     onClick={() => copyToClipboard(p.Plate_Number)}
@@ -223,22 +333,23 @@ const ParkingTable = ({
                         ) : (
                         <div>
                             {p.Contract || 'N/A'}
-                            {(p.manual_update || !p.Contract) && 
-                                <button 
-                                    onClick={() => {
-                                    setEditingIndex(originalIndex);
-                                    setNewContract(p.Contract || '');
-                                    }} 
-                                    style={{
-                                    marginLeft: '5px', 
-                                    padding: '2px 5px', 
-                                    fontSize: '10px',
-                                    cursor: 'pointer'
-                                    }}
-                                >
-                                    {p.Contract ? 'Edit' : 'Add'}
-                                </button>
-                            }
+                            <button 
+                                onClick={() => {
+                                setEditingIndex(originalIndex);
+                                setNewContract(p.Contract || '');
+                                }} 
+                                style={{
+                                marginLeft: '5px', 
+                                padding: '2px 5px', 
+                                fontSize: '10px',
+                                cursor: 'pointer',
+                                backgroundColor: p.Contract ? '#e3f2fd' : '#ffebee',
+                                border: '1px solid #ccc',
+                                borderRadius: '3px'
+                                }}
+                            >
+                                {p.Contract ? 'Edit' : 'Add'}
+                            </button>
                         </div>
                         )}
                   </td>
@@ -273,7 +384,7 @@ const ParkingTable = ({
               )
             ) : (
               <tr>
-                <td colSpan={parkingType === 'invygo' ? 13 : 14} style={{ textAlign: "center", color: "#888", padding: 24 }}>
+                <td colSpan={parkingType === 'invygo' ? 14 : 15} style={{ textAlign: "center", color: "#888", padding: 24 }}>
                   {parkingFilter === 'matched' ? 'No matched parking data found.' : 
                    parkingFilter === 'unmatched' ? 'No unmatched parking data found.' : 
                    'No parking data found.'}

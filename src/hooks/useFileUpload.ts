@@ -35,9 +35,8 @@ export const useFileUpload = () => {
         setParkingData([]);
         
         const reader = new FileReader();
-        reader.onload = (evt: any) => {
-          const data = new Uint8Array(evt.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
+        
+        const processContractData = (workbook: XLSX.WorkBook) => {
           const sheetName = workbook.SheetNames[0];
           const sheet = workbook.Sheets[sheetName] as XLSX.WorkSheet;
           
@@ -61,7 +60,22 @@ export const useFileUpload = () => {
             setContracts([]);
           }
         };
-        reader.readAsArrayBuffer(file);
+        
+        if (file.name.toLowerCase().endsWith('.csv')) {
+          reader.onload = (evt: any) => {
+            const text = evt.target.result;
+            const workbook = XLSX.read(text, { type: 'string', codepage: 65001 });
+            processContractData(workbook);
+          };
+          reader.readAsText(file);
+        } else {
+          reader.onload = (evt: any) => {
+            const data = new Uint8Array(evt.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            processContractData(workbook);
+          };
+          reader.readAsArrayBuffer(file);
+        }
       };
     
       const handleInvygoUpload = (e: any) => {
@@ -73,20 +87,39 @@ export const useFileUpload = () => {
         setInvygoPlates([]);
         
         const reader = new FileReader();
-        reader.onload = (evt: any) => {
-          const data = new Uint8Array(evt.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const sheetName = workbook.SheetNames[0];
-          const sheet = workbook.Sheets[sheetName] as XLSX.WorkSheet;
-          const jsonData = XLSX.utils.sheet_to_json(sheet).filter((row: any) =>
-            Object.values(row).some(v => v !== null && v !== '')
-          );
+        
+        const processInvygoData = (jsonData: any[]) => {
           const plates = jsonData.map((row: any) =>
             (row['Plate'] || '').toString().replace(/\s/g, '').trim().toUpperCase()
           );
           setInvygoPlates(plates);
         };
-        reader.readAsArrayBuffer(file);
+        
+        if (file.name.toLowerCase().endsWith('.csv')) {
+          reader.onload = (evt: any) => {
+            const text = evt.target.result;
+            const workbook = XLSX.read(text, { type: 'string', codepage: 65001 });
+            const sheetName = workbook.SheetNames[0];
+            const sheet = workbook.Sheets[sheetName] as XLSX.WorkSheet;
+            const jsonData = XLSX.utils.sheet_to_json(sheet).filter((row: any) =>
+              Object.values(row).some(v => v !== null && v !== '')
+            );
+            processInvygoData(jsonData);
+          };
+          reader.readAsText(file);
+        } else {
+          reader.onload = (evt: any) => {
+            const data = new Uint8Array(evt.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheetName = workbook.SheetNames[0];
+            const sheet = workbook.Sheets[sheetName] as XLSX.WorkSheet;
+            const jsonData = XLSX.utils.sheet_to_json(sheet).filter((row: any) =>
+              Object.values(row).some(v => v !== null && v !== '')
+            );
+            processInvygoData(jsonData);
+          };
+          reader.readAsArrayBuffer(file);
+        }
       };
 
       const handleParkingUpload = (e: any) => {
