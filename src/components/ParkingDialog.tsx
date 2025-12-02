@@ -1,7 +1,7 @@
 
 import React from 'react';
 
-const ParkingDialog = ({ showParkingDialog, setShowParkingDialog, setParkingType, setView, parkingData, invygoPlates }: any) => {
+const ParkingDialog = ({ showParkingDialog, setShowParkingDialog, setParkingType, setView, parkingData, invygoPlates, dealerBookings }: any) => {
     if (!showParkingDialog) return null;
 
     return (
@@ -33,7 +33,12 @@ const ParkingDialog = ({ showParkingDialog, setShowParkingDialog, setParkingType
                 >
                   🚗 Invygo Parking ({parkingData.filter((p: any) => {
                     const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
-                    return invygoPlates.includes(plateNumber);
+                    // Check if plate is in invygo plates OR has a dealer booking (replacement car)
+                    const hasInvygoPlate = invygoPlates.includes(plateNumber);
+                    const hasDealerBooking = p.Contract && dealerBookings && dealerBookings.some((booking: any) => 
+                        booking['Agreement']?.toString() === p.Contract?.toString()
+                    );
+                    return hasInvygoPlate || hasDealerBooking;
                   }).length})
                 </button>
                 <button
@@ -55,7 +60,12 @@ const ParkingDialog = ({ showParkingDialog, setShowParkingDialog, setParkingType
                 >
                   🅿️ YELO Parking ({parkingData.filter((p: any) => {
                     const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
-                    return !invygoPlates.includes(plateNumber);
+                    // Check if plate is NOT in invygo plates AND does NOT have a dealer booking
+                    const hasInvygoPlate = invygoPlates.includes(plateNumber);
+                    const hasDealerBooking = p.Contract && dealerBookings && dealerBookings.some((booking: any) => 
+                        booking['Agreement']?.toString() === p.Contract?.toString()
+                    );
+                    return !hasInvygoPlate && !hasDealerBooking;
                   }).length})
                 </button>
                 <button

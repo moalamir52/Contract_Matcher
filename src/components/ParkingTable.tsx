@@ -11,16 +11,26 @@ const ParkingTable = ({
     copyToClipboard,
     updateParkingInfo,
     selectedRows,
-    setSelectedRows
+    setSelectedRows,
+    dealerBookings
 }: any) => {
 
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [newContract, setNewContract] = useState('');
 
-    const typedParkingData = parkingData.filter((p: any) => {
+    const isInvygoCar = (p: any) => {
         const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
-        const isCorrectType = parkingType === 'invygo' ? invygoPlates.includes(plateNumber) : !invygoPlates.includes(plateNumber);
-        return isCorrectType;
+        // Check if plate is in invygo plates OR has a dealer booking (replacement car)
+        const hasInvygoPlate = invygoPlates.includes(plateNumber);
+        const hasDealerBooking = p.Contract && dealerBookings && dealerBookings.some((booking: any) => 
+            booking['Agreement']?.toString() === p.Contract?.toString()
+        );
+        return hasInvygoPlate || hasDealerBooking;
+    };
+    
+    const typedParkingData = parkingData.filter((p: any) => {
+        const isInvygoType = isInvygoCar(p);
+        return parkingType === 'invygo' ? isInvygoType : !isInvygoType;
     });
 
     const totalAmount = typedParkingData.reduce((acc: number, p: any) => acc + Number(p.Amount || 0), 0);
@@ -133,11 +143,9 @@ const ParkingTable = ({
                   checked={selectedRows.size > 0 && selectedRows.size === parkingData.filter((p: any) => {
                     const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
                     if (parkingType === 'invygo') {
-                      const isInvygoCar = invygoPlates.includes(plateNumber);
-                      if (!isInvygoCar) return false;
+                      if (!isInvygoCar(p)) return false;
                     } else {
-                      const isInvygoCar = invygoPlates.includes(plateNumber);
-                      if (isInvygoCar) return false;
+                      if (isInvygoCar(p)) return false;
                     }
                     if (parkingFilter === 'matched') {
                       if (parkingType === 'invygo') {
@@ -162,11 +170,9 @@ const ParkingTable = ({
                     const visibleRows = parkingData.map((p: any, index: number) => ({ p, index })).filter(({ p }: any) => {
                       const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
                       if (parkingType === 'invygo') {
-                        const isInvygoCar = invygoPlates.includes(plateNumber);
-                        if (!isInvygoCar) return false;
+                        if (!isInvygoCar(p)) return false;
                       } else {
-                        const isInvygoCar = invygoPlates.includes(plateNumber);
-                        if (isInvygoCar) return false;
+                        if (isInvygoCar(p)) return false;
                       }
                       if (parkingFilter === 'matched') {
                         if (parkingType === 'invygo') {
@@ -227,13 +233,11 @@ const ParkingTable = ({
                 const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
                 
                 if (parkingType === 'invygo') {
-                  // Show only Invygo cars
-                  const isInvygoCar = invygoPlates.includes(plateNumber);
-                  if (!isInvygoCar) return false;
+                  // Show only Invygo cars (including replacement cars)
+                  if (!isInvygoCar(p)) return false;
                 } else {
-                  // Show only YELO cars (not in Invygo)
-                  const isInvygoCar = invygoPlates.includes(plateNumber);
-                  if (isInvygoCar) return false;
+                  // Show only YELO cars (not Invygo)
+                  if (isInvygoCar(p)) return false;
                 }
                 
                 // Apply parking filter

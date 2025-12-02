@@ -710,7 +710,7 @@ export default function App() {
             {view === 'contracts' && <ContractsTable contractsToShow={contractsToShow} invygoSummary={invygoSummary} setInvygoFilter={setInvygoFilter} invygoFilter={invygoFilter} setSelectedContract={setSelectedContract} contractNoHeader={contractNoHeader} customerHeader={customerHeader} plateNoHeader={plateNoHeader} pickupHeader={pickupHeader} dropoffHeader={dropoffHeader} findHeader={findHeader} />}
             {view === 'unrented' && <UnrentedTable unrentedToShow={unrentedToShow} />}
             {view === 'repeated' && <RepeatedTable repeatedToShow={repeatedToShow} setSelectedContract={setSelectedContract} contractNoHeader={contractNoHeader} customerHeader={customerHeader} pickupHeader={pickupHeader} dropoffHeader={dropoffHeader} statusHeader={statusHeader} />}
-            {view === 'parking' && <ParkingTable parkingData={parkingData} parkingType={parkingType} setParkingFilter={setParkingFilter} parkingFilter={parkingFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateParkingInfo={updateParkingInfo} selectedRows={selectedRows} setSelectedRows={setSelectedRows} />}
+            {view === 'parking' && <ParkingTable parkingData={parkingData} parkingType={parkingType} setParkingFilter={setParkingFilter} parkingFilter={parkingFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateParkingInfo={updateParkingInfo} selectedRows={selectedRows} setSelectedRows={setSelectedRows} dealerBookings={dealerBookings} />}
           </>
         )}
 
@@ -719,7 +719,7 @@ export default function App() {
             {view === 'contracts' && <ContractsTable contractsToShow={contractsToShow} invygoSummary={invygoSummary} setInvygoFilter={setInvygoFilter} invygoFilter={invygoFilter} setSelectedContract={setSelectedContract} contractNoHeader={contractNoHeader} customerHeader={customerHeader} plateNoHeader={plateNoHeader} pickupHeader={pickupHeader} dropoffHeader={dropoffHeader} findHeader={findHeader} />}
             {view === 'unrented' && <UnrentedTable unrentedToShow={unrentedToShow} />}
             {view === 'repeated' && <RepeatedTable repeatedToShow={repeatedToShow} setSelectedContract={setSelectedContract} contractNoHeader={contractNoHeader} customerHeader={customerHeader} pickupHeader={pickupHeader} dropoffHeader={dropoffHeader} statusHeader={statusHeader} />}
-            {view === 'parking' && <ParkingTable parkingData={parkingData} parkingType={parkingType} setParkingFilter={setParkingFilter} parkingFilter={parkingFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateParkingInfo={updateParkingInfo} selectedRows={selectedRows} setSelectedRows={setSelectedRows} />}
+            {view === 'parking' && <ParkingTable parkingData={parkingData} parkingType={parkingType} setParkingFilter={setParkingFilter} parkingFilter={parkingFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateParkingInfo={updateParkingInfo} selectedRows={selectedRows} setSelectedRows={setSelectedRows} dealerBookings={dealerBookings} />}
           </>
         )}
 
@@ -730,6 +730,7 @@ export default function App() {
           setView={setView} 
           parkingData={parkingData} 
           invygoPlates={invygoPlates} 
+          dealerBookings={dealerBookings}
         />
 
         <ExportDialog 

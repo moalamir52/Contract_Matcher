@@ -133,6 +133,22 @@ export const useFileUpload = () => {
         const reader = new FileReader();
         
         const processData = (jsonData: any[]) => {
+          console.log('🚀 Processing parking data...');
+          console.log('📊 Dealer bookings loaded:', dealerBookings.length);
+          console.log('📋 Contracts loaded:', contracts.length);
+          console.log('🎯 All parking plates:', jsonData.map(p => p.Plate_Number).slice(0, 20));
+          
+          // Check for C2508000D03591309 in dealer bookings
+          const targetBooking = dealerBookings.find(b => b['Agreement'] === 'C2508000D03591309');
+          if (targetBooking) {
+            console.log('🎯 Found C2508000D03591309 in dealer bookings:', targetBooking);
+            console.log('🔍 Plate field value:', targetBooking['Plate']);
+            console.log('🔍 All fields:', Object.keys(targetBooking));
+          } else {
+            console.log('❌ C2508000D03591309 NOT found in dealer bookings');
+            console.log('Available agreements:', dealerBookings.map(b => b['Agreement']).slice(0, 10));
+          }
+          
           // Fill Contract and Dealer_Booking_Number columns
           const updatedData = jsonData.map((row: any) => {
             const plateNumber = (row['Plate_Number'] || '').toString().replace(/\s/g, '').trim().toUpperCase();
@@ -147,14 +163,78 @@ export const useFileUpload = () => {
               const dropoffHeader = findHeader(['Drop-off Date', 'Dropoff Date', 'Drop off Date']);
               const contractNoHeader = findHeader(['Contract No.']);
               
+              // Debug logging for C2508000D03591309
+              if (plateNumber && contractNoHeader) {
+                const dealerBooking = dealerBookings.find((booking: any) => {
+                  const bookingPlate = (booking['Plate'] || '').toString().replace(/\s/g, '').trim().toUpperCase();
+                  return bookingPlate === plateNumber;
+                });
+                
+                // Log only plates with dealer bookings
+                if (dealerBooking) {
+                  console.log(`🚗 Plate ${plateNumber} -> Agreement: ${dealerBooking['Agreement']}`);
+                }
+                
+                if (dealerBooking && dealerBooking['Agreement'] === 'C2508000D03591309') {
+                  console.log(`🎯 FOUND TARGET CONTRACT C2508000D03591309!`);
+                  console.log(`📋 Dealer booking:`, {
+                    plate: plateNumber,
+                    agreement: dealerBooking['Agreement'],
+                    bookingId: dealerBooking['Booking ID'],
+                    customer: dealerBooking['Customer']
+                  });
+                  
+                  const contractByAgreement = contracts.find((c: any) => {
+                    const contractNo = (c[contractNoHeader] || '').toString().trim();
+                    return contractNo === 'C2508000D03591309';
+                  });
+                  
+                  if (contractByAgreement) {
+                    const customerHeader = findHeader(['Customer']);
+                    console.log(`✅ Found matching contract:`, {
+                      contractNo: contractByAgreement[contractNoHeader],
+                      originalPlate: plateNoHeader ? contractByAgreement[plateNoHeader] : 'N/A',
+                      customer: customerHeader ? contractByAgreement[customerHeader] : 'N/A'
+                    });
+                    console.log(`🎆 SUCCESS! Contract C2508000D03591309 matched with replacement car ${plateNumber}`);
+                  } else {
+                    console.log(`🚨 ERROR! Contract C2508000D03591309 not found in contracts file!`);
+                    console.log('Available contracts:', contracts.map(c => contractNoHeader ? c[contractNoHeader] : 'N/A').slice(0, 10));
+                  }
+                }
+              }
+              
               if (plateNoHeader && pickupHeader && dropoffHeader && contractNoHeader) {
-                // For YELO cars, always search in ALL contracts
-                // For Invygo cars, search in filtered contracts if available, otherwise all contracts
-                const contractsToSearch = contracts.filter((c: any) => {
+                // First try: Match by plate number (original logic)
+                let contractsToSearch = contracts.filter((c: any) => {
                   const contractPlateValue = plateNoHeader ? (c[plateNoHeader] || '') : '';
                   const contractPlate = contractPlateValue.toString().replace(/\s/g, '').trim().toUpperCase();
                   return contractPlate === plateNumber;
                 });
+                
+                // Second try: If no match by plate, try matching by Agreement/Contract No. for replacement cars
+                if (contractsToSearch.length === 0) {
+                  const dealerBooking = dealerBookings.find((booking: any) => {
+                    const bookingPlate = (booking['Plate'] || '').toString().replace(/\s/g, '').trim().toUpperCase();
+                    return bookingPlate === plateNumber;
+                  });
+                  
+                  if (dealerBooking && dealerBooking['Agreement']) {
+                    const contractByAgreement = contracts.find((c: any) => {
+                      const contractNo = (c[contractNoHeader] || '').toString().trim();
+                      const agreement = dealerBooking['Agreement'].toString().trim();
+                      return contractNo === agreement;
+                    });
+                    
+                    if (contractByAgreement) {
+                      contractsToSearch = [contractByAgreement];
+                      
+                      if (dealerBooking['Agreement'] === 'C2508000D03591309') {
+                        console.log(`🎉 REPLACEMENT CAR MATCH! Plate ${plateNumber} matched to Contract C2508000D03591309`);
+                      }
+                    }
+                  }
+                }
                 
                 const matchingContracts = contractsToSearch.filter((c: any) => {
                   const contractPlate = (c[plateNoHeader] || '').toString().replace(/\s/g, '').trim().toUpperCase();
@@ -268,21 +348,26 @@ export const useFileUpload = () => {
                     row.Contract_End = matchingContract[dropoffHeader];
                   }
                   
-                  // For Invygo cars, get dealer booking data
-                  if (invygoPlates.includes(plateNumber)) {
-                    const dealerBooking = dealerBookings.find((booking: any) => 
-                      booking['Agreement']?.toString() === contractNo?.toString()
-                    );
+                  // Check if this is an Invygo car (either in invygo plates OR has dealer booking)
+                  const dealerBooking = dealerBookings.find((booking: any) => 
+                    booking['Agreement']?.toString() === contractNo?.toString()
+                  );
+                  
+                  const isInvygoCar = invygoPlates.includes(plateNumber) || dealerBooking;
+                  
+                  if (isInvygoCar && dealerBooking) {
+                    // For Invygo cars, get dealer booking data
+                    row.Dealer_Booking_Number = dealerBooking['Booking ID'];
+                    row.Customer_Name = dealerBooking['Customer'] || dealerBooking['Customer Name'] || '';
                     
-                    if (dealerBooking) {
-                      row.Dealer_Booking_Number = dealerBooking['Booking ID'];
-                      row.Customer_Name = dealerBooking['Customer'] || dealerBooking['Customer Name'] || '';
-                      
-                      // Build Model from Brand Name, Car Name, and Car Year
-                      const brandName = dealerBooking['Brand Name'] || '';
-                      const carName = dealerBooking['Car Name'] || '';
-                      const carYear = dealerBooking['Car Year'] || '';
-                      row.Model = [brandName, carName, carYear].filter(part => part).join(' ');
+                    // Build Model from Brand Name, Car Name, and Car Year
+                    const brandName = dealerBooking['Brand Name'] || '';
+                    const carName = dealerBooking['Car Name'] || '';
+                    const carYear = dealerBooking['Car Year'] || '';
+                    row.Model = [brandName, carName, carYear].filter(part => part).join(' ');
+                    
+                    if (contractNo === 'C2508000D03591309') {
+                      console.log(`🎉 SUCCESS! Contract C2508000D03591309 matched as Invygo with replacement car ${plateNumber}`);
                     }
                   } else { // For YELO cars, get contract data directly
                     const bookingNumberHeader = findHeader(['Booking Number', 'Booking No', 'Booking ID']);
