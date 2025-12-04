@@ -6,8 +6,11 @@ import ContractsTable from './components/ContractsTable';
 import UnrentedTable from './components/UnrentedTable';
 import RepeatedTable from './components/RepeatedTable';
 import ParkingTable from './components/ParkingTable';
+import SalikTable from './components/SalikTable';
+import SalikSummaryTable from './components/SalikSummaryTable';
 import TemplateDialog from './components/TemplateDialog';
 import ParkingDialog from './components/ParkingDialog';
+import SalikDialog from './components/SalikDialog';
 import ExportDialog from './components/ExportDialog';
 import CopyDialog from './components/CopyDialog';
 import ContractDetailsModal from './components/ContractDetailsModal';
@@ -17,18 +20,22 @@ export default function App() {
     contracts,
     parkingData,
     dealerBookings,
+    salikData,
     invygoPlates,
     contractFileName,
     invygoFileName,
     dealerFileName,
     parkingFileName,
+    salikFileName,
     handleFileUpload,
     handleInvygoUpload,
     handleParkingUpload,
     handleDealerBookingUpload,
+    handleSalikUpload,
     findHeader,
     setContracts,
     setParkingData,
+    setSalikData,
     setInvygoPlates
   } = useFileUpload();
 
@@ -45,6 +52,9 @@ export default function App() {
     ],
     parking: [
       'Date', 'Time', 'Plate_Number', 'Description', 'Amount', 'Time_In', 'Time_Out'
+    ],
+    salik: [
+      'Trip_Date', 'Trip_Time', 'Dealer_Booking_Number', 'Plate_Number', 'Toll_Gate', 'Direction', 'Amount', 'Tax_Invoice_No'
     ]
   };
   const downloadTemplate = (type: keyof typeof templateHeaders) => {
@@ -59,7 +69,7 @@ export default function App() {
     document.body.removeChild(link);
     setShowTemplateDialog(false);
   };
-  const [view, setView] = useState<'contracts' | 'unrented' | 'repeated' | 'parking'>('contracts');
+  const [view, setView] = useState<'contracts' | 'unrented' | 'repeated' | 'parking' | 'salik'>('contracts');
   const [invygoFilter, setInvygoFilter] = useState<'all' | 'invygo' | 'other' | 'invygo-open' | 'invygo-closed' | 'other-open' | 'other-closed'>('all');
   const [filtered, setFiltered] = useState<any[]>([]);
   const [search, setSearch] = useState('');
@@ -77,6 +87,10 @@ export default function App() {
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [parkingFilter, setParkingFilter] = useState<'all' | 'matched' | 'unmatched' | 'edited'>('all');
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
+  const [salikFilter, setSalikFilter] = useState<'all' | 'matched' | 'unmatched' | 'edited'>('all');
+  const [showSalikDialog, setShowSalikDialog] = useState(false);
+  const [salikType, setSalikType] = useState<'invygo' | 'yelo'>('invygo');
+  const [showSalikSummary, setShowSalikSummary] = useState(false);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -148,6 +162,24 @@ export default function App() {
     } else if (view === 'repeated') {
       data = repeatedToShow.map(([plate, rows]) => ({ plate, count: rows.length }));
       columnMap = { 'Plate No.': 'plate', 'Contracts Count': 'count' };
+    } else if (view === 'salik') {
+      data = salikData.filter((s: any) => {
+        const plateMatch = s.Plate_Number?.toString().toLowerCase().includes(search.toLowerCase());
+        const contractMatch = s.Contract?.toString().toLowerCase().includes(search.toLowerCase());
+        return plateMatch || contractMatch || !search;
+      });
+      columnMap = {
+        'Plate Number': 'Plate_Number',
+        'Date': 'Date',
+        'Time': 'Time',
+        'Gate': 'Gate',
+        'Amount': 'Amount',
+        'Direction': 'Direction',
+        'Contract': 'Contract',
+        'Contract Start': 'Contract_Start',
+        'Contract End': 'Contract_End',
+        'Customer Name': 'CustomerName'
+      };
     }
 
     const result = selectedColumns.map(columnName => {
@@ -180,6 +212,8 @@ export default function App() {
       return ['Plate No.'];
     } else if (view === 'repeated') {
       return ['Plate No.', 'Contracts Count'];
+    } else if (view === 'salik') {
+      return ['Plate Number', 'Date', 'Time', 'Gate', 'Amount', 'Direction', 'Contract', 'Contract Start', 'Contract End', 'Customer Name'];
     }
     return [];
   };
@@ -361,6 +395,119 @@ export default function App() {
     
     return invygoPlates.includes(normalizedPlate) && (plateMatch || customerMatch || !search);
   });
+
+  const updateSalikInfo = (salikIndex: number, contractNo: string) => {
+    const contractNoHeaderVal = findHeader(['Contract No.']);
+    const customerHeaderVal = findHeader(['Customer', 'Customer Name']);
+    const pickupHeaderVal = findHeader(['Pick-up Date', 'Pickup Date']);
+    const dropoffHeaderVal = findHeader(['Drop-off Date', 'Dropoff Date', 'Drop off Date']);
+    const statusHeaderVal = findHeader(['Status']);
+
+    if (!contractNoHeaderVal) {
+      alert("Cannot find 'Contract No.' header in the contracts file.");
+      return;
+    }
+
+    if (!contracts || contracts.length === 0) {
+      alert("No contracts loaded. Please upload contracts file first.");
+      return;
+    }
+
+    // Clean the input contract number
+    const cleanContractNo = contractNo.toString().trim();
+    
+    // Try to find contract with exact match first
+    let contract = contracts.find((c: any) => {
+      const contractValue = c[contractNoHeaderVal]?.toString().trim();
+      return contractValue === cleanContractNo;
+    });
+
+    // If not found, try case-insensitive match
+    if (!contract) {
+      contract = contracts.find((c: any) => {
+        const contractValue = c[contractNoHeaderVal]?.toString().trim().toLowerCase();
+        return contractValue === cleanContractNo.toLowerCase();
+      });
+    }
+
+
+
+    if (contract) {
+      const newSalikData = [...salikData];
+      const targetItem = newSalikData[salikIndex];
+      const plateNumber = targetItem.Plate_Number;
+      const tripDate = targetItem.Date;
+      
+      // Find all records with same plate number within the contract period
+      const contractStart = pickupHeaderVal ? contract[pickupHeaderVal] : null;
+      const contractEnd = dropoffHeaderVal ? contract[dropoffHeaderVal] : null;
+      const status = statusHeaderVal ? contract[statusHeaderVal]?.toString().toLowerCase() : '';
+      
+      const similarIndices = newSalikData.map((item, index) => {
+        if (item.Plate_Number === plateNumber) {
+          const itemDate = parseExcelDate(item.Date);
+          const startDate = parseExcelDate(contractStart);
+          const endDate = parseExcelDate(contractEnd);
+          
+          console.log(`Checking item ${index}:`);
+          console.log('  Item date raw:', item.Date);
+          console.log('  Item date parsed:', itemDate);
+          console.log('  Start date parsed:', startDate);
+          console.log('  End date parsed:', endDate);
+          
+          if (itemDate && startDate) {
+            // If contract is open, check if item date >= start date
+            if (status === 'open' || status === 'active') {
+              const isValid = itemDate.getTime() >= startDate.getTime();
+              console.log('  Open contract check:', isValid);
+              return isValid ? index : -1;
+            }
+            // If contract is closed, check if item date is within contract period
+            if (endDate) {
+              const isValid = (itemDate.getTime() >= startDate.getTime() && itemDate.getTime() <= endDate.getTime());
+              console.log('  Closed contract check:', isValid);
+              return isValid ? index : -1;
+            }
+          }
+        }
+        return -1;
+      }).filter(index => index !== -1);
+
+      console.log('Similar records found:', similarIndices.length);
+      console.log('Similar indices:', similarIndices);
+
+      // Update all similar records
+      similarIndices.forEach(index => {
+        const salikItem = newSalikData[index];
+        
+        salikItem.Contract = contract[contractNoHeaderVal];
+        
+        if (customerHeaderVal) {
+          salikItem.CustomerName = contract[customerHeaderVal];
+        }
+        if (pickupHeaderVal) {
+          salikItem.Contract_Start = contract[pickupHeaderVal];
+        }
+        if (dropoffHeaderVal) {
+          const status = statusHeaderVal ? contract[statusHeaderVal]?.toString().toLowerCase() : '';
+          if (status === 'open' || status === 'active') {
+            salikItem.Contract_End = 'Open';
+          } else {
+            salikItem.Contract_End = contract[dropoffHeaderVal];
+          }
+        }
+        
+        salikItem.manual_update = true;
+      });
+      
+      setSalikData(newSalikData);
+    } else {
+      // Show available contract numbers for debugging
+      const availableContracts = contracts.slice(0, 5).map((c: any) => c[contractNoHeaderVal]).filter(Boolean);
+      const contractsList = availableContracts.length > 0 ? `\n\nAvailable contracts (first 5): ${availableContracts.join(', ')}` : '';
+      alert(`Contract with number "${contractNo}" not found.${contractsList}\n\nPlease check the contract number and try again.`);
+    }
+  };
 
   const updateParkingInfo = (parkingIndex: number, contractNo: string) => {
     const contractNoHeaderVal = findHeader(['Contract No.']);
@@ -623,6 +770,18 @@ export default function App() {
               padding: "8px 18px",
               cursor: "pointer"
             }}>Parking ({parkingData.length})</button>
+          <button
+            onClick={() => setShowSalikDialog(true)}
+            style={{
+              background: view === 'salik' ? "#FFD600" : "#fff",
+              color: view === 'salik' ? "#222" : "#673ab7",
+              border: "2px solid #FFD600",
+              borderRadius: 8,
+              fontWeight: "bold",
+              fontSize: 16,
+              padding: "8px 18px",
+              cursor: "pointer"
+            }}>Salik ({salikData.length})</button>
         </div>
         <div style={{ display: "flex", gap: 20, alignItems: "flex-end", marginBottom: 22, flexWrap: "wrap" }}>
           </div>
@@ -650,6 +809,12 @@ export default function App() {
             onUpload={handleParkingUpload}
             accept=".xlsx, .xls, .csv"
             fileName={parkingFileName}
+          />
+          <FileUploadButton
+            title="Upload Salik File"
+            onUpload={handleSalikUpload}
+            accept=".xlsx, .xls, .csv"
+            fileName={salikFileName}
           />
           <div style={{ display: "flex", flexDirection: "column" }}>
             <label style={{ fontSize: 16, fontWeight: "bold", marginBottom: 4, textAlign: "center" }}>From</label>
@@ -711,6 +876,8 @@ export default function App() {
             {view === 'unrented' && <UnrentedTable unrentedToShow={unrentedToShow} />}
             {view === 'repeated' && <RepeatedTable repeatedToShow={repeatedToShow} setSelectedContract={setSelectedContract} contractNoHeader={contractNoHeader} customerHeader={customerHeader} pickupHeader={pickupHeader} dropoffHeader={dropoffHeader} statusHeader={statusHeader} />}
             {view === 'parking' && <ParkingTable parkingData={parkingData} parkingType={parkingType} setParkingFilter={setParkingFilter} parkingFilter={parkingFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateParkingInfo={updateParkingInfo} selectedRows={selectedRows} setSelectedRows={setSelectedRows} dealerBookings={dealerBookings} />}
+            {view === 'salik' && !showSalikSummary && <SalikTable salikData={salikData} salikType={salikType} setSalikFilter={setSalikFilter} salikFilter={salikFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateSalikInfo={updateSalikInfo} selectedRows={selectedRows} setSelectedRows={setSelectedRows} dealerBookings={dealerBookings} setShowSalikSummary={setShowSalikSummary} setSalikData={setSalikData} />}
+            {view === 'salik' && showSalikSummary && <SalikSummaryTable salikData={salikData} salikType={salikType} invygoPlates={invygoPlates} search={search} setShowSalikSummary={setShowSalikSummary} dealerBookings={dealerBookings} />}
           </>
         )}
 
@@ -720,8 +887,20 @@ export default function App() {
             {view === 'unrented' && <UnrentedTable unrentedToShow={unrentedToShow} />}
             {view === 'repeated' && <RepeatedTable repeatedToShow={repeatedToShow} setSelectedContract={setSelectedContract} contractNoHeader={contractNoHeader} customerHeader={customerHeader} pickupHeader={pickupHeader} dropoffHeader={dropoffHeader} statusHeader={statusHeader} />}
             {view === 'parking' && <ParkingTable parkingData={parkingData} parkingType={parkingType} setParkingFilter={setParkingFilter} parkingFilter={parkingFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateParkingInfo={updateParkingInfo} selectedRows={selectedRows} setSelectedRows={setSelectedRows} dealerBookings={dealerBookings} />}
+            {view === 'salik' && !showSalikSummary && <SalikTable salikData={salikData} salikType={salikType} setSalikFilter={setSalikFilter} salikFilter={salikFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateSalikInfo={updateSalikInfo} selectedRows={selectedRows} setSelectedRows={setSelectedRows} dealerBookings={dealerBookings} setShowSalikSummary={setShowSalikSummary} setSalikData={setSalikData} />}
+            {view === 'salik' && showSalikSummary && <SalikSummaryTable salikData={salikData} salikType={salikType} invygoPlates={invygoPlates} search={search} setShowSalikSummary={setShowSalikSummary} dealerBookings={dealerBookings} />}
           </>
         )}
+
+        <SalikDialog 
+          showSalikDialog={showSalikDialog} 
+          setShowSalikDialog={setShowSalikDialog} 
+          setSalikType={setSalikType} 
+          setView={setView} 
+          salikData={salikData} 
+          invygoPlates={invygoPlates} 
+          dealerBookings={dealerBookings}
+        />
 
         <ParkingDialog 
           showParkingDialog={showParkingDialog} 

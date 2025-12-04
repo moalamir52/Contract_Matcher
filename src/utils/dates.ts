@@ -4,10 +4,28 @@ import * as XLSX from 'xlsx';
 export function parseExcelDate(value: any): Date | null {
   if (!value) return null;
   if (typeof value === 'number') {
-    // Use XLSX built-in date parsing which handles timezone correctly
-    const excelDate = XLSX.SSF.parse_date_code(value);
+    // Calculate date and time manually from Excel serial number
+    const wholeDays = Math.floor(value);
+    const timeFraction = value - wholeDays;
+    
+    // Excel epoch starts from January 1, 1900 (but Excel incorrectly treats 1900 as leap year)
+    const excelEpoch = new Date(1900, 0, 1);
+    const daysSinceEpoch = wholeDays - 1; // Adjust for Excel's 1-based counting
+    
+    // Calculate the date
+    const targetDate = new Date(excelEpoch.getTime() + daysSinceEpoch * 24 * 60 * 60 * 1000);
+    
+    // Calculate time from fraction
+    const totalSeconds = Math.round(timeFraction * 24 * 60 * 60);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    
+    const result = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), hours, minutes, seconds);
+    
 
-    return excelDate ? new Date(excelDate.y, excelDate.m - 1, excelDate.d, excelDate.H || 0, excelDate.M || 0, excelDate.S || 0) : null;
+
+    return result;
   }
   if (typeof value === 'string') {
     // Check if string contains both date and time with AM/PM (DD/MM/YYYY HH:MM AM/PM)

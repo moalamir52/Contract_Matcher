@@ -12,6 +12,8 @@ export const useFileUpload = () => {
     const [invygoFileName, setInvygoFileName] = useState<string>();
     const [dealerFileName, setDealerFileName] = useState<string>();
     const [parkingFileName, setParkingFileName] = useState<string>();
+    const [salikData, setSalikData] = useState<any[]>([]);
+    const [salikFileName, setSalikFileName] = useState<string>();
 
     const findHeader = (aliases: string[]): string | undefined => {
         const lowerCaseHeaders = headers.map(h => h.toLowerCase());
@@ -494,23 +496,171 @@ export const useFileUpload = () => {
         }
       };
 
+    const handleSalikUpload = (e: any) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        setSalikFileName(file.name);
+        
+        setSalikData([]);
+        
+        const reader = new FileReader();
+        
+        const processData = (jsonData: any[]) => {
+          const updatedData = jsonData.map((row: any) => {
+            const plateNumber = (row['Plate_Number'] || '').toString().replace(/\s/g, '').trim().toUpperCase();
+            const salikDate = parseExcelDate(row['Trip_Date']);
+            
+            // Map the original column names to standard names for display
+            row.Date = row['Trip_Date'];
+            row.Time = row['Trip_Time'];
+            row.Gate = row['Toll_Gate'];
+            
+            if (plateNumber && salikDate && contracts.length > 0) {
+              const plateNoHeader = findHeader(['Plate No.', 'Plate']);
+              const pickupHeader = findHeader(['Pick-up Date', 'Pickup Date']);
+              const dropoffHeader = findHeader(['Drop-off Date', 'Dropoff Date', 'Drop off Date']);
+              const contractNoHeader = findHeader(['Contract No.']);
+              
+              if (plateNoHeader && pickupHeader && dropoffHeader && contractNoHeader) {
+                let contractsToSearch = contracts.filter((c: any) => {
+                  const contractPlateValue = plateNoHeader ? (c[plateNoHeader] || '') : '';
+                  const contractPlate = contractPlateValue.toString().replace(/\s/g, '').trim().toUpperCase();
+                  return contractPlate === plateNumber;
+                });
+                
+                if (contractsToSearch.length === 0) {
+                  const dealerBooking = dealerBookings.find((booking: any) => {
+                    const bookingPlate = (booking['Plate'] || '').toString().replace(/\s/g, '').trim().toUpperCase();
+                    return bookingPlate === plateNumber;
+                  });
+                  
+                  if (dealerBooking && dealerBooking['Agreement']) {
+                    const contractByAgreement = contracts.find((c: any) => {
+                      const contractNo = (c[contractNoHeader] || '').toString().trim();
+                      const agreement = dealerBooking['Agreement'].toString().trim();
+                      return contractNo === agreement;
+                    });
+                    
+                    if (contractByAgreement) {
+                      contractsToSearch = [contractByAgreement];
+                    }
+                  }
+                }
+                
+                const matchingContracts = contractsToSearch.filter((c: any) => {
+                  const pickup = parseExcelDate(c[pickupHeader]);
+                  const dropoff = parseExcelDate(c[dropoffHeader]);
+                  const statusHeader = findHeader(['Status']);
+                  const status = statusHeader ? c[statusHeader]?.toString().toLowerCase() : '';
+                  
+                  if (!pickup || !salikDate) return false;
+                  
+                  const salikTime = salikDate.getTime();
+                  const pickupTime = pickup.getTime();
+                  
+                  if (status === 'open' || status === 'active') {
+                      return salikTime >= pickupTime;
+                  }
+                  
+                  if (!dropoff) return false;
+                  const dropoffTime = dropoff.getTime();
+                  return salikTime >= pickupTime && salikTime <= dropoffTime;
+                });
+                
+                let matchingContract = null;
+                if (matchingContracts.length > 0) {
+                  matchingContract = matchingContracts[0];
+                }
+                
+                if (matchingContract) {
+                  const contractNo = contractNoHeader ? matchingContract[contractNoHeader] : '';
+                  row.Contract = contractNo;
+                  row.Contract_Start = matchingContract[pickupHeader];
+                  
+                  const statusHeader = findHeader(['Status']);
+                  const status = statusHeader ? matchingContract[statusHeader]?.toString().toLowerCase() : '';
+                  
+                  if (status === 'open' || status === 'active') {
+                    row.Contract_End = 'Open';
+                  } else {
+                    row.Contract_End = matchingContract[dropoffHeader];
+                  }
+                  
+                  const dealerBooking = dealerBookings.find((booking: any) => 
+                    booking['Agreement']?.toString() === contractNo?.toString()
+                  );
+                  
+                  if (dealerBooking) {
+                    row.CustomerName = dealerBooking['Customer'] || dealerBooking['Customer Name'] || '';
+                  } else {
+                    const customerHeaderContract = findHeader(['Customer', 'Customer Name']);
+                    row.CustomerName = customerHeaderContract ? (matchingContract[customerHeaderContract] || '') : '';
+                  }
+                } else {
+                  row.Contract = '';
+                  row.Contract_Start = '';
+                  row.Contract_End = '';
+                  row.CustomerName = '';
+                }
+              }
+            }
+            
+            return row;
+          });
+          
+          setSalikData(updatedData);
+        };
+        
+        if (file.name.toLowerCase().endsWith('.csv')) {
+          reader.onload = (evt: any) => {
+            const text = evt.target.result;
+            const workbook = XLSX.read(text, { type: 'string', codepage: 65001 });
+            const sheetName = workbook.SheetNames[0];
+            const sheet = workbook.Sheets[sheetName] as XLSX.WorkSheet;
+            const jsonData = XLSX.utils.sheet_to_json(sheet).filter((row: any) =>
+              Object.values(row).some(v => v !== null && v !== '')
+            );
+            
+            processData(jsonData);
+          };
+          reader.readAsText(file);
+        } else {
+          reader.onload = (evt: any) => {
+            const data = new Uint8Array(evt.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheetName = workbook.SheetNames[0];
+            const sheet = workbook.Sheets[sheetName] as XLSX.WorkSheet;
+            const jsonData = XLSX.utils.sheet_to_json(sheet).filter((row: any) =>
+              Object.values(row).some(v => v !== null && v !== '')
+            );
+            
+            processData(jsonData);
+          };
+          reader.readAsArrayBuffer(file);
+        }
+      };
+
     return {
         contracts,
         parkingData,
         dealerBookings,
+        salikData,
         headers,
         invygoPlates,
         contractFileName,
         invygoFileName,
         dealerFileName,
         parkingFileName,
+        salikFileName,
         handleFileUpload,
         handleInvygoUpload,
         handleParkingUpload,
         handleDealerBookingUpload,
+        handleSalikUpload,
         findHeader,
         setContracts,
         setParkingData,
+        setSalikData,
         setInvygoPlates
     }
 }
