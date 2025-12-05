@@ -7,7 +7,9 @@ const SalikSummaryTable = ({
     invygoPlates, 
     search, 
     setShowSalikSummary,
-    dealerBookings
+    dealerBookings,
+    summaryFilter,
+    setSummaryFilter
 }: any) => {
     const [editingInvoice, setEditingInvoice] = useState<string | null>(null);
     const [invoiceValues, setInvoiceValues] = useState<{[key: string]: string}>({});
@@ -74,9 +76,21 @@ const SalikSummaryTable = ({
         ...group,
         invoice: invoiceValues[group.contractKey] || group.invoice
     })).filter((group: any) => {
-        if (!search) return true;
-        return group.contractNo.toLowerCase().includes(search.toLowerCase()) ||
-               group.customer.toLowerCase().includes(search.toLowerCase());
+        // Apply search filter
+        if (search && !(group.contractNo.toLowerCase().includes(search.toLowerCase()) ||
+               group.customer.toLowerCase().includes(search.toLowerCase()))) {
+            return false;
+        }
+        
+        // Apply status filter
+        if (summaryFilter === 'open') {
+            return group.endDate === 'Open';
+        }
+        if (summaryFilter === 'closed') {
+            return group.endDate !== 'Open';
+        }
+        
+        return true; // 'all' filter
     });
 
     const updateSequentialInvoices = (editedContract: string, newValue: string) => {
@@ -130,6 +144,53 @@ const SalikSummaryTable = ({
                     }}>
                         📊 Salik Summary - {salikType === 'invygo' ? 'Invygo' : 'YELO'}
                     </h2>
+                </div>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    <button
+                        onClick={() => setSummaryFilter('all')}
+                        style={{
+                            background: summaryFilter === 'all' ? "#FFD600" : "#fff",
+                            color: summaryFilter === 'all' ? "#222" : "#673ab7",
+                            border: "2px solid #FFD600",
+                            borderRadius: 6,
+                            fontWeight: "bold",
+                            fontSize: 12,
+                            padding: "4px 8px",
+                            cursor: "pointer"
+                        }}
+                    >
+                        All
+                    </button>
+                    <button
+                        onClick={() => setSummaryFilter('open')}
+                        style={{
+                            background: summaryFilter === 'open' ? "#FFD600" : "#fff",
+                            color: summaryFilter === 'open' ? "#222" : "#673ab7",
+                            border: "2px solid #FFD600",
+                            borderRadius: 6,
+                            fontWeight: "bold",
+                            fontSize: 12,
+                            padding: "4px 8px",
+                            cursor: "pointer"
+                        }}
+                    >
+                        Open
+                    </button>
+                    <button
+                        onClick={() => setSummaryFilter('closed')}
+                        style={{
+                            background: summaryFilter === 'closed' ? "#FFD600" : "#fff",
+                            color: summaryFilter === 'closed' ? "#222" : "#673ab7",
+                            border: "2px solid #FFD600",
+                            borderRadius: 6,
+                            fontWeight: "bold",
+                            fontSize: 12,
+                            padding: "4px 8px",
+                            cursor: "pointer"
+                        }}
+                    >
+                        Closed
+                    </button>
                 </div>
                 <button
                     onClick={async () => {
@@ -245,7 +306,8 @@ const SalikSummaryTable = ({
                             fontSize: 14,
                             boxShadow: "0 2px 8px #FFD60055"
                         }}>
-                            <th style={{ padding: "8px 4px", borderTopLeftRadius: 18, borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>INVOICE</th>
+                            <th style={{ padding: "8px 4px", borderTopLeftRadius: 18, borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>#</th>
+                            <th style={{ padding: "8px 4px", borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>INVOICE</th>
                             <th style={{ padding: "8px 4px", borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Customer</th>
                             <th style={{ padding: "8px 4px", borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Booking Number</th>
                             <th style={{ padding: "8px 4px", borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Contract No.</th>
@@ -268,6 +330,7 @@ const SalikSummaryTable = ({
                                     transition: "background 0.2s",
                                     borderBottom: "1px solid #f3e6b3"
                                 }}>
+                                    <td style={{ padding: "6px 4px", textAlign: "center", color: "#888", fontWeight: "bold", fontSize: 12 }}>{index + 1}</td>
                                     <td style={{ padding: "6px 4px", textAlign: "center", fontWeight: "bold", color: "#1976d2", fontSize: 11 }}>
                                         {editingInvoice === group.contractKey ? (
                                             <input
@@ -369,7 +432,7 @@ const SalikSummaryTable = ({
                             ))
                         ) : (
                             <tr>
-                                <td colSpan={13} style={{ textAlign: "center", color: "#888", padding: 24 }}>
+                                <td colSpan={14} style={{ textAlign: "center", color: "#888", padding: 24 }}>
                                     No customer data found.
                                 </td>
                             </tr>

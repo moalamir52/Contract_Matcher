@@ -3,7 +3,13 @@ import * as XLSX from 'xlsx';
 
 export function parseExcelDate(value: any): Date | null {
   if (!value) return null;
+  if (value instanceof Date) {
+    return value;
+  }
   if (typeof value === 'number') {
+    // Round to nearest day to ignore time and fix floating point issues for dates near midnight.
+    value = Math.round(value); 
+
     // Calculate date and time manually from Excel serial number
     const wholeDays = Math.floor(value);
     const timeFraction = value - wholeDays;
@@ -12,7 +18,7 @@ export function parseExcelDate(value: any): Date | null {
     const excelEpoch = new Date(1900, 0, 1);
     const daysSinceEpoch = wholeDays - 1; // Adjust for Excel's 1-based counting
     
-    // Calculate the date
+    // Calculate the date using UTC to avoid timezone issues
     const targetDate = new Date(excelEpoch.getTime() + daysSinceEpoch * 24 * 60 * 60 * 1000);
     
     // Calculate time from fraction
@@ -21,7 +27,8 @@ export function parseExcelDate(value: any): Date | null {
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
     
-    const result = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), hours, minutes, seconds);
+    // Use the original date calculation
+    const result = new Date(Date.UTC(targetDate.getUTCFullYear(), targetDate.getUTCMonth(), targetDate.getUTCDate(), hours, minutes, seconds));
     
 
 

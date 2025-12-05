@@ -8,12 +8,14 @@ export const useFileUpload = () => {
     const [dealerBookings, setDealerBookings] = useState<any[]>([]);
     const [headers, setHeaders] = useState<string[]>([]);
     const [invygoPlates, setInvygoPlates] = useState<string[]>([]);
+    const [revenueData, setRevenueData] = useState<any[]>([]);
     const [contractFileName, setContractFileName] = useState<string>();
     const [invygoFileName, setInvygoFileName] = useState<string>();
     const [dealerFileName, setDealerFileName] = useState<string>();
     const [parkingFileName, setParkingFileName] = useState<string>();
     const [salikData, setSalikData] = useState<any[]>([]);
     const [salikFileName, setSalikFileName] = useState<string>();
+    const [revenueFileName, setRevenueFileName] = useState<string>();
 
     const findHeader = (aliases: string[]): string | undefined => {
         const lowerCaseHeaders = headers.map(h => h.toLowerCase());
@@ -596,11 +598,15 @@ export const useFileUpload = () => {
                     const customerHeaderContract = findHeader(['Customer', 'Customer Name']);
                     row.CustomerName = customerHeaderContract ? (matchingContract[customerHeaderContract] || '') : '';
                   }
+
+                  const isReplacement = !invygoPlates.includes(plateNumber);
+                  row.matchType = isReplacement ? 'replacement' : 'matched';
                 } else {
                   row.Contract = '';
                   row.Contract_Start = '';
                   row.Contract_End = '';
                   row.CustomerName = '';
+                  row.matchType = 'unmatched';
                 }
               }
             }
@@ -617,7 +623,7 @@ export const useFileUpload = () => {
             const workbook = XLSX.read(text, { type: 'string', codepage: 65001 });
             const sheetName = workbook.SheetNames[0];
             const sheet = workbook.Sheets[sheetName] as XLSX.WorkSheet;
-            const jsonData = XLSX.utils.sheet_to_json(sheet).filter((row: any) =>
+            const jsonData = XLSX.utils.sheet_to_json(sheet, { raw: false }).filter((row: any) =>
               Object.values(row).some(v => v !== null && v !== '')
             );
             
@@ -630,7 +636,7 @@ export const useFileUpload = () => {
             const workbook = XLSX.read(data, { type: 'array' });
             const sheetName = workbook.SheetNames[0];
             const sheet = workbook.Sheets[sheetName] as XLSX.WorkSheet;
-            const jsonData = XLSX.utils.sheet_to_json(sheet).filter((row: any) =>
+            const jsonData = XLSX.utils.sheet_to_json(sheet, { raw: false }).filter((row: any) =>
               Object.values(row).some(v => v !== null && v !== '')
             );
             
@@ -640,11 +646,52 @@ export const useFileUpload = () => {
         }
       };
 
+    const handleRevenueUpload = (e: any) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        setRevenueFileName(file.name);
+        
+        setRevenueData([]);
+        
+        const reader = new FileReader();
+        
+        const processData = (jsonData: any[]) => {
+            setRevenueData(jsonData);
+        };
+        
+        if (file.name.toLowerCase().endsWith('.csv')) {
+            reader.onload = (evt: any) => {
+                const text = evt.target.result;
+                const workbook = XLSX.read(text, { type: 'string', codepage: 65001 });
+                const sheetName = workbook.SheetNames[0];
+                const sheet = workbook.Sheets[sheetName] as XLSX.WorkSheet;
+                const jsonData = XLSX.utils.sheet_to_json(sheet).filter((row: any) =>
+                    Object.values(row).some(v => v !== null && v !== '')
+                );
+                processData(jsonData);
+            };
+            reader.readAsText(file);
+        } else {
+            reader.onload = (evt: any) => {
+                const data = new Uint8Array(evt.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const sheetName = workbook.SheetNames[0];
+                const sheet = workbook.Sheets[sheetName] as XLSX.WorkSheet;
+                const jsonData = XLSX.utils.sheet_to_json(sheet).filter((row: any) =>
+                    Object.values(row).some(v => v !== null && v !== '')
+                );
+                processData(jsonData);
+            };
+            reader.readAsArrayBuffer(file);
+        }
+    };
+
     return {
         contracts,
         parkingData,
         dealerBookings,
         salikData,
+        revenueData,
         headers,
         invygoPlates,
         contractFileName,
@@ -652,11 +699,13 @@ export const useFileUpload = () => {
         dealerFileName,
         parkingFileName,
         salikFileName,
+        revenueFileName,
         handleFileUpload,
         handleInvygoUpload,
         handleParkingUpload,
         handleDealerBookingUpload,
         handleSalikUpload,
+        handleRevenueUpload,
         findHeader,
         setContracts,
         setParkingData,

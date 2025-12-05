@@ -22,16 +22,19 @@ export default function App() {
     dealerBookings,
     salikData,
     invygoPlates,
+    revenueData,
     contractFileName,
     invygoFileName,
     dealerFileName,
     parkingFileName,
     salikFileName,
+    revenueFileName,
     handleFileUpload,
     handleInvygoUpload,
     handleParkingUpload,
     handleDealerBookingUpload,
     handleSalikUpload,
+    handleRevenueUpload,
     findHeader,
     setContracts,
     setParkingData,
@@ -55,6 +58,9 @@ export default function App() {
     ],
     salik: [
       'Trip_Date', 'Trip_Time', 'Dealer_Booking_Number', 'Plate_Number', 'Toll_Gate', 'Direction', 'Amount', 'Tax_Invoice_No'
+    ],
+    revenue: [
+      'Contract No.', 'Revenue Date', 'Plate Number'
     ]
   };
   const downloadTemplate = (type: keyof typeof templateHeaders) => {
@@ -91,6 +97,7 @@ export default function App() {
   const [showSalikDialog, setShowSalikDialog] = useState(false);
   const [salikType, setSalikType] = useState<'invygo' | 'yelo'>('invygo');
   const [showSalikSummary, setShowSalikSummary] = useState(false);
+  const [summaryFilter, setSummaryFilter] = useState<'all' | 'open' | 'closed'>('all');
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -316,7 +323,7 @@ export default function App() {
         return plateValue.toString().replace(/\s/g, '').trim().toUpperCase()
     }).filter(p => p));
 
-    const notRented = invygoPlates.filter(plate => !rentedPlates.has(plate));
+    const notRented = invygoPlates.filter(plate => !rentedPlates.has(plate)).sort();
 
     const grouped: Record<string, any[]> = {};
     result.forEach((c: any) => {
@@ -326,7 +333,9 @@ export default function App() {
         grouped[plate].push(c);
     });
 
-    const repeated = Object.entries(grouped).filter(([_, arr]) => arr.length > 1);
+    const repeated = Object.entries(grouped)
+      .filter(([_, arr]) => arr.length > 1)
+      .sort((a, b) => a[0].localeCompare(b[0]));
 
     setRepeatedContracts(repeated);
     setFiltered(result);
@@ -403,8 +412,8 @@ export default function App() {
     const dropoffHeaderVal = findHeader(['Drop-off Date', 'Dropoff Date', 'Drop off Date']);
     const statusHeaderVal = findHeader(['Status']);
 
-    if (!contractNoHeaderVal) {
-      alert("Cannot find 'Contract No.' header in the contracts file.");
+    if (!contractNoHeaderVal || !pickupHeaderVal || !dropoffHeaderVal) {
+      alert("The contracts file must contain 'Contract No.', 'Pick-up Date', and 'Drop-off Date' headers.");
       return;
     }
 
@@ -413,99 +422,164 @@ export default function App() {
       return;
     }
 
-    // Clean the input contract number
     const cleanContractNo = contractNo.toString().trim();
     
-    // Try to find contract with exact match first
-    let contract = contracts.find((c: any) => {
-      const contractValue = c[contractNoHeaderVal]?.toString().trim();
-      return contractValue === cleanContractNo;
-    });
+    let contract = contracts.find((c: any) => 
+      c[contractNoHeaderVal]?.toString().trim().toLowerCase() === cleanContractNo.toLowerCase()
+    );
 
-    // If not found, try case-insensitive match
-    if (!contract) {
-      contract = contracts.find((c: any) => {
-        const contractValue = c[contractNoHeaderVal]?.toString().trim().toLowerCase();
-        return contractValue === cleanContractNo.toLowerCase();
-      });
-    }
-
-
+    const newSalikData = [...salikData];
+    const salikItem = newSalikData[salikIndex];
 
     if (contract) {
-      const newSalikData = [...salikData];
-      const targetItem = newSalikData[salikIndex];
-      const plateNumber = targetItem.Plate_Number;
-      const tripDate = targetItem.Date;
-      
-      // Find all records with same plate number within the contract period
-      const contractStart = pickupHeaderVal ? contract[pickupHeaderVal] : null;
-      const contractEnd = dropoffHeaderVal ? contract[dropoffHeaderVal] : null;
-      const status = statusHeaderVal ? contract[statusHeaderVal]?.toString().toLowerCase() : '';
-      
-      const similarIndices = newSalikData.map((item, index) => {
-        if (item.Plate_Number === plateNumber) {
-          const itemDate = parseExcelDate(item.Date);
-          const startDate = parseExcelDate(contractStart);
-          const endDate = parseExcelDate(contractEnd);
-          
-          console.log(`Checking item ${index}:`);
-          console.log('  Item date raw:', item.Date);
-          console.log('  Item date parsed:', itemDate);
-          console.log('  Start date parsed:', startDate);
-          console.log('  End date parsed:', endDate);
-          
-          if (itemDate && startDate) {
-            // If contract is open, check if item date >= start date
-            if (status === 'open' || status === 'active') {
-              const isValid = itemDate.getTime() >= startDate.getTime();
-              console.log('  Open contract check:', isValid);
-              return isValid ? index : -1;
-            }
-            // If contract is closed, check if item date is within contract period
-            if (endDate) {
-              const isValid = (itemDate.getTime() >= startDate.getTime() && itemDate.getTime() <= endDate.getTime());
-              console.log('  Closed contract check:', isValid);
-              return isValid ? index : -1;
-            }
-          }
-        }
-        return -1;
-      }).filter(index => index !== -1);
+      // Contract found, update the single salik item
+      salikItem.Contract = contract[contractNoHeaderVal];
+      salikItem.Contract_Start = contract[pickupHeaderVal];
 
-      console.log('Similar records found:', similarIndices.length);
-      console.log('Similar indices:', similarIndices);
-
-      // Update all similar records
-      similarIndices.forEach(index => {
-        const salikItem = newSalikData[index];
-        
-        salikItem.Contract = contract[contractNoHeaderVal];
-        
-        if (customerHeaderVal) {
+      const dealerBooking = dealerBookings.find((booking: any) => 
+          booking['Agreement']?.toString() === salikItem.Contract?.toString()
+      );
+      if (dealerBooking) {
+          salikItem.CustomerName = dealerBooking['Customer'] || dealerBooking['Customer Name'] || '';
+      } else if (customerHeaderVal) {
           salikItem.CustomerName = contract[customerHeaderVal];
-        }
-        if (pickupHeaderVal) {
-          salikItem.Contract_Start = contract[pickupHeaderVal];
-        }
-        if (dropoffHeaderVal) {
-          const status = statusHeaderVal ? contract[statusHeaderVal]?.toString().toLowerCase() : '';
-          if (status === 'open' || status === 'active') {
-            salikItem.Contract_End = 'Open';
-          } else {
-            salikItem.Contract_End = contract[dropoffHeaderVal];
-          }
-        }
-        
-        salikItem.manual_update = true;
-      });
+      }
+
+      const contractStatus = statusHeaderVal ? contract[statusHeaderVal]?.toString().toLowerCase() : '';
+      if (contractStatus === 'open' || contractStatus === 'active') {
+        salikItem.Contract_End = 'Open';
+      } else {
+        salikItem.Contract_End = contract[dropoffHeaderVal];
+      }
+      
+      salikItem.matchType = 'matched';
+      salikItem.manual_update = true;
       
       setSalikData(newSalikData);
     } else {
-      // Show available contract numbers for debugging
-      const availableContracts = contracts.slice(0, 5).map((c: any) => c[contractNoHeaderVal]).filter(Boolean);
-      const contractsList = availableContracts.length > 0 ? `\n\nAvailable contracts (first 5): ${availableContracts.join(', ')}` : '';
-      alert(`Contract with number "${contractNo}" not found.${contractsList}\n\nPlease check the contract number and try again.`);
+      // Contract not found, update only the single item being edited
+      salikItem.Contract = '';
+      salikItem.CustomerName = '';
+      salikItem.Contract_Start = '';
+      salikItem.Contract_End = '';
+      salikItem.matchType = 'unmatched';
+      salikItem.manual_update = false;
+
+      setSalikData(newSalikData);
+    }
+  };
+
+  const handleAutoMatchSalik = (salikIndex: number) => {
+    if (!revenueData || revenueData.length === 0) {
+      alert("Please upload the Revenue file first.");
+      return;
+    }
+  
+    const salikItem = salikData[salikIndex];
+    const salikPlate = (salikItem['Plate_Number'] || '').toString().replace(/\s/g, '').trim().toUpperCase();
+    const salikDate = parseExcelDate(salikItem['Trip_Date']);
+    const formattedSalikDate = formatDate(salikDate);
+    
+    const revenueMatch = revenueData.find((rev: any) => {
+      const revPlate = (rev['Plate Number'] || '').toString().replace(/\s+/g, '').trim().toUpperCase();
+      const revDateObj = parseExcelDate(rev['Revenue Date']);
+      
+      if (!revPlate || !revDateObj) return false;
+      
+      const formattedRevDate = formatDate(revDateObj);
+      return revPlate === salikPlate && formattedRevDate === formattedSalikDate;
+    });
+  
+    if (revenueMatch) {
+      const contractNo = revenueMatch['Contract No.'];
+      if (contractNo) {
+        updateSalikInfo(salikIndex, contractNo);
+        alert(`Match found! Updating with Contract No: ${contractNo}`);
+      } else {
+        alert("A match was found in the revenue file, but it does not contain a contract number.");
+      }
+    } else {
+      const newSalikData = [...salikData];
+      const salikItemToUpdate = newSalikData[salikIndex];
+      salikItemToUpdate.Contract = '';
+      salikItemToUpdate.CustomerName = '';
+      salikItemToUpdate.Contract_Start = '';
+      salikItemToUpdate.Contract_End = '';
+      salikItemToUpdate.matchType = 'unmatched';
+      salikItemToUpdate.manual_update = false;
+      setSalikData(newSalikData);
+      
+      alert(`No match found in the revenue file for plate ${salikPlate} on ${formatDate(salikDate)}. Record marked as unmatched.`);
+    }
+  };
+
+  const handleRevenueCheck = () => {
+    if (!revenueData || revenueData.length === 0) {
+      alert("Please upload the Revenue file first.");
+      return;
+    }
+    
+    if (selectedRows.size === 0) {
+      alert("Please select rows to check revenue for.");
+      return;
+    }
+
+    let updatedCount = 0;
+    const newSalikData = [...salikData];
+
+    newSalikData.forEach((salikItem, index) => {
+      if (selectedRows.has(index) && (salikItem.matchType === 'unmatched' || salikItem.matchType === 'replacement')) {
+        const salikPlate = (salikItem['Plate_Number'] || '').toString().replace(/\s/g, '').trim().toUpperCase();
+
+        if (salikPlate === 'E26365') {
+          console.log('--- Tracing E26365 ---');
+          console.log('Found Salik Item for E26365:', salikItem);
+        }
+
+        const salikDate = parseExcelDate(salikItem['Trip_Date']);
+        const formattedSalikDate = formatDate(salikDate);
+        
+        if (!salikPlate || !formattedSalikDate) {
+          return;
+        }
+
+        const revenueMatch = revenueData.find((rev: any) => {
+          const revPlate = (rev['Plate Number'] || '').toString().replace(/\s+/g, '').trim().toUpperCase();
+          const revDateObj = parseExcelDate(rev['Revenue Date']);
+          
+          if (!revPlate || !revDateObj) return false;
+          
+          const formattedRevDate = formatDate(revDateObj);
+          return revPlate === salikPlate && formattedRevDate === formattedSalikDate;
+        });
+
+
+
+        if (revenueMatch) {
+          const contractNo = revenueMatch['Contract No.'];
+          if (contractNo) {
+            updateSalikInfo(index, contractNo);
+            updatedCount++;
+          }
+        } else {
+          const salikItemToUpdate = newSalikData[index];
+          salikItemToUpdate.Contract = '';
+          salikItemToUpdate.CustomerName = '';
+          salikItemToUpdate.Contract_Start = '';
+          salikItemToUpdate.Contract_End = '';
+          salikItemToUpdate.matchType = 'unmatched';
+          salikItemToUpdate.manual_update = false;
+          updatedCount++;
+        }
+      }
+    });
+
+    if (updatedCount > 0) {
+      setSalikData(newSalikData);
+      setSelectedRows(new Set());
+      alert(`${updatedCount} selected records have been updated based on the revenue file.`);
+    } else {
+      alert("No new matches found in the revenue file for the selected records.");
     }
   };
 
@@ -722,6 +796,7 @@ export default function App() {
               padding: "8px 18px",
               cursor: "pointer"
             }}>Copy</button>
+
           <button
             onClick={() => setView('contracts')}
             style={{
@@ -816,6 +891,12 @@ export default function App() {
             accept=".xlsx, .xls, .csv"
             fileName={salikFileName}
           />
+          <FileUploadButton
+            title="Upload Revenue File"
+            onUpload={handleRevenueUpload}
+            accept=".xlsx, .xls, .csv"
+            fileName={revenueFileName}
+          />
           <div style={{ display: "flex", flexDirection: "column" }}>
             <label style={{ fontSize: 16, fontWeight: "bold", marginBottom: 4, textAlign: "center" }}>From</label>
             <input
@@ -876,8 +957,8 @@ export default function App() {
             {view === 'unrented' && <UnrentedTable unrentedToShow={unrentedToShow} />}
             {view === 'repeated' && <RepeatedTable repeatedToShow={repeatedToShow} setSelectedContract={setSelectedContract} contractNoHeader={contractNoHeader} customerHeader={customerHeader} pickupHeader={pickupHeader} dropoffHeader={dropoffHeader} statusHeader={statusHeader} />}
             {view === 'parking' && <ParkingTable parkingData={parkingData} parkingType={parkingType} setParkingFilter={setParkingFilter} parkingFilter={parkingFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateParkingInfo={updateParkingInfo} selectedRows={selectedRows} setSelectedRows={setSelectedRows} dealerBookings={dealerBookings} />}
-            {view === 'salik' && !showSalikSummary && <SalikTable salikData={salikData} salikType={salikType} setSalikFilter={setSalikFilter} salikFilter={salikFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateSalikInfo={updateSalikInfo} selectedRows={selectedRows} setSelectedRows={setSelectedRows} dealerBookings={dealerBookings} setShowSalikSummary={setShowSalikSummary} setSalikData={setSalikData} />}
-            {view === 'salik' && showSalikSummary && <SalikSummaryTable salikData={salikData} salikType={salikType} invygoPlates={invygoPlates} search={search} setShowSalikSummary={setShowSalikSummary} dealerBookings={dealerBookings} />}
+            {view === 'salik' && !showSalikSummary && <SalikTable salikData={salikData} salikType={salikType} setSalikFilter={setSalikFilter} salikFilter={salikFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateSalikInfo={updateSalikInfo} selectedRows={selectedRows} setSelectedRows={setSelectedRows} dealerBookings={dealerBookings} setShowSalikSummary={setShowSalikSummary} setSalikData={setSalikData} handleAutoMatchSalik={handleAutoMatchSalik} handleRevenueCheck={handleRevenueCheck} />}
+            {view === 'salik' && showSalikSummary && <SalikSummaryTable salikData={salikData} salikType={salikType} invygoPlates={invygoPlates} search={search} setShowSalikSummary={setShowSalikSummary} dealerBookings={dealerBookings} summaryFilter={summaryFilter} setSummaryFilter={setSummaryFilter} />}
           </>
         )}
 
@@ -887,8 +968,8 @@ export default function App() {
             {view === 'unrented' && <UnrentedTable unrentedToShow={unrentedToShow} />}
             {view === 'repeated' && <RepeatedTable repeatedToShow={repeatedToShow} setSelectedContract={setSelectedContract} contractNoHeader={contractNoHeader} customerHeader={customerHeader} pickupHeader={pickupHeader} dropoffHeader={dropoffHeader} statusHeader={statusHeader} />}
             {view === 'parking' && <ParkingTable parkingData={parkingData} parkingType={parkingType} setParkingFilter={setParkingFilter} parkingFilter={parkingFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateParkingInfo={updateParkingInfo} selectedRows={selectedRows} setSelectedRows={setSelectedRows} dealerBookings={dealerBookings} />}
-            {view === 'salik' && !showSalikSummary && <SalikTable salikData={salikData} salikType={salikType} setSalikFilter={setSalikFilter} salikFilter={salikFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateSalikInfo={updateSalikInfo} selectedRows={selectedRows} setSelectedRows={setSelectedRows} dealerBookings={dealerBookings} setShowSalikSummary={setShowSalikSummary} setSalikData={setSalikData} />}
-            {view === 'salik' && showSalikSummary && <SalikSummaryTable salikData={salikData} salikType={salikType} invygoPlates={invygoPlates} search={search} setShowSalikSummary={setShowSalikSummary} dealerBookings={dealerBookings} />}
+            {view === 'salik' && !showSalikSummary && <SalikTable salikData={salikData} salikType={salikType} setSalikFilter={setSalikFilter} salikFilter={salikFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateSalikInfo={updateSalikInfo} selectedRows={selectedRows} setSelectedRows={setSelectedRows} dealerBookings={dealerBookings} setShowSalikSummary={setShowSalikSummary} setSalikData={setSalikData} handleAutoMatchSalik={handleAutoMatchSalik} handleRevenueCheck={handleRevenueCheck} />}
+            {view === 'salik' && showSalikSummary && <SalikSummaryTable salikData={salikData} salikType={salikType} invygoPlates={invygoPlates} search={search} setShowSalikSummary={setShowSalikSummary} dealerBookings={dealerBookings} summaryFilter={summaryFilter} setSummaryFilter={setSummaryFilter} />}
           </>
         )}
 

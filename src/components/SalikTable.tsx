@@ -14,7 +14,9 @@ const SalikTable = ({
     setSelectedRows,
     dealerBookings,
     setShowSalikSummary,
-    setSalikData
+    setSalikData,
+    handleAutoMatchSalik,
+    handleRevenueCheck
 }: any) => {
 
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -37,12 +39,9 @@ const SalikTable = ({
 
     const totalAmount = typedSalikData.reduce((acc: number, s: any) => acc + Number(s.Amount || 0), 0);
 
-    const matchedSalik = typedSalikData.filter((s: any) => {
-        return s.Contract && s.CustomerName && !s.ignored;
-    });
-    const unmatchedSalik = typedSalikData.filter((s: any) => {
-        return (!s.Contract || !s.CustomerName) && !s.ignored;
-    });
+    const matchedSalik = typedSalikData.filter((s: any) => s.matchType === 'matched' && !s.ignored);
+    const replacementSalik = typedSalikData.filter((s: any) => s.matchType === 'replacement' && !s.ignored);
+    const unmatchedSalik = typedSalikData.filter((s: any) => s.matchType === 'unmatched' && !s.ignored);
     const ignoredSalik = typedSalikData.filter((s: any) => s.ignored);
     const editedSalik = typedSalikData.filter((s: any) => s.manual_update);
 
@@ -90,6 +89,12 @@ const SalikTable = ({
           style={{color: "#388e3c", cursor: 'pointer', textDecoration: 'underline'}}
         >
           {matchedSalik.length}
+        </span> &nbsp; | &nbsp;
+        🔄 Replacement: <span
+            onClick={() => setSalikFilter('replacement')}
+            style={{color: "#f57c00", cursor: 'pointer', textDecoration: 'underline'}}
+        >
+            {replacementSalik.length}
         </span> &nbsp; | &nbsp;
         ❌ Unmatched: <span 
           onClick={() => setSalikFilter('unmatched')} 
@@ -217,6 +222,21 @@ const SalikTable = ({
         >
           🚫 Ignore Selected
         </button>
+        <button
+          onClick={handleRevenueCheck}
+          style={{
+            background: "#2196F3",
+            color: "white",
+            border: "none",
+            borderRadius: 8,
+            fontWeight: "bold",
+            fontSize: 14,
+            padding: "8px 16px",
+            cursor: "pointer"
+          }}
+        >
+          💰 Check Revenue
+        </button>
       </div>
 
       <div style={{
@@ -254,10 +274,13 @@ const SalikTable = ({
                       if (isInvygoCar(s)) return false;
                     }
                     if (salikFilter === 'matched') {
-                      if (!s.Contract || !s.CustomerName) return false;
+                      if (s.matchType !== 'matched') return false;
                     }
                     if (salikFilter === 'unmatched') {
-                      if (s.Contract && s.CustomerName) return false;
+                        if (s.matchType !== 'unmatched') return false;
+                    }
+                    if (salikFilter === 'replacement') {
+                        if (s.matchType !== 'replacement') return false;
                     }
                     if (salikFilter === 'edited' && !s.manual_update) return false;
                     const plateMatch = s.Plate_Number?.toString().toLowerCase().includes(search.toLowerCase());
@@ -273,10 +296,13 @@ const SalikTable = ({
                         if (isInvygoCar(s)) return false;
                       }
                       if (salikFilter === 'matched') {
-                        if (!s.Contract || !s.CustomerName) return false;
+                        if (s.matchType !== 'matched') return false;
                       }
                       if (salikFilter === 'unmatched') {
-                        if (s.Contract && s.CustomerName) return false;
+                          if (s.matchType !== 'unmatched') return false;
+                      }
+                      if (salikFilter === 'replacement') {
+                          if (s.matchType !== 'replacement') return false;
                       }
                       if (salikFilter === 'edited' && !s.manual_update) return false;
                       const plateMatch = s.Plate_Number?.toString().toLowerCase().includes(search.toLowerCase());
@@ -301,7 +327,8 @@ const SalikTable = ({
               <th style={{ padding: "10px 4px", borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Contract</th>
               <th style={{ padding: "10px 4px", borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Customer Name</th>
               <th style={{ padding: "10px 4px", borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Contract Start</th>
-              <th style={{ padding: "10px 4px", borderTopRightRadius: 18, borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Contract End</th>
+              <th style={{ padding: "10px 4px", borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Contract End</th>
+              <th style={{ padding: "10px 4px", borderTopRightRadius: 18, borderBottom: "2px solid #FFD600", textAlign: "center", fontSize: 12 }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -319,10 +346,13 @@ const SalikTable = ({
                 
                 // Apply salik filter
                 if (salikFilter === 'matched') {
-                    if (!s.Contract || !s.CustomerName) return false;
+                    if (s.matchType !== 'matched') return false;
                 }
                 if (salikFilter === 'unmatched') {
-                    if (s.Contract && s.CustomerName) return false;
+                    if (s.matchType !== 'unmatched') return false;
+                }
+                if (salikFilter === 'replacement') {
+                    if (s.matchType !== 'replacement') return false;
                 }
                 if (salikFilter === 'edited' && !s.manual_update) return false;
 
@@ -330,13 +360,31 @@ const SalikTable = ({
                 const plateMatch = s.Plate_Number?.toString().toLowerCase().includes(search.toLowerCase());
                 const contractMatch = s.Contract?.toString().toLowerCase().includes(search.toLowerCase());
                 return plateMatch || contractMatch || !search;
+              }).sort((a: any, b: any) => {
+                const plateA = (a.Plate_Number || '').toString();
+                const plateB = (b.Plate_Number || '').toString();
+                return plateA.localeCompare(plateB);
               }).map((s: any, index: number) => {
                 const originalIndex = salikData.indexOf(s);
+                const getRowStyle = () => {
+                    if (s.manual_update) return { background: '#C8E6C9' }; // A distinct green for manual updates
+                    if (s.ignored) return { background: '#F5F5F5', color: '#9E9E9E' };
+                    switch (s.matchType) {
+                        case 'matched':
+                            return { background: index % 2 === 0 ? "#E8F5E9" : "#F1F8E9" };
+                        case 'replacement':
+                            return { background: index % 2 === 0 ? "#FFF8E1" : "#FFFAEC" };
+                        case 'unmatched':
+                            return { background: index % 2 === 0 ? "#FBE9E7" : "#FFF3F2" };
+                        default:
+                            return { background: index % 2 === 0 ? "#FFFDE7" : "#fff" };
+                    }
+                };
                 return (
                 <tr key={index} style={{
-                  background: s.manual_update ? '#e8f5e9' : (s.Contract ? (index % 2 === 0 ? "#FFFDE7" : "#fff") : "#FBE9E7"),
-                  transition: "background 0.2s",
-                  borderBottom: "1px solid #f3e6b3"
+                    ...getRowStyle(),
+                    transition: "background 0.2s",
+                    borderBottom: "1px solid #f3e6b3"
                 }}>
                   <td style={{ padding: "8px 4px", textAlign: "center" }}>
                     <input 
@@ -371,7 +419,23 @@ const SalikTable = ({
                     onMouseOut={e => (e.currentTarget as HTMLElement).style.background = ""}
                   >{s.Plate_Number}</td>
                   <td style={{ padding: "8px 4px", textAlign: "center", fontSize: 12 }}>
-                    <div style={{ fontWeight: "bold", marginBottom: 2 }}>{formatDate(s.Date)}</div>
+                    <div style={{ fontWeight: "bold", marginBottom: 2 }}>
+                      {(() => {
+                        if (typeof s.Trip_Date === 'number') {
+                          const excelEpoch = new Date(1899, 11, 30);
+                          const date = new Date(excelEpoch.getTime() + s.Trip_Date * 24 * 60 * 60 * 1000);
+                          return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
+                        } else if (s.Trip_Date) {
+                          const parts = s.Trip_Date.toString().split('/');
+                          if (parts.length === 3) {
+                            let [day, month, year] = parts;
+                            if (year.length === 2) year = '20' + year;
+                            return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
+                          }
+                        }
+                        return s.Trip_Date;
+                      })()}
+                    </div>
                   </td>
                   <td style={{ padding: "8px 4px", textAlign: "center", fontWeight: "bold", color: "#ff5722", fontSize: 12 }}>{s.Time || ''}</td>
                   <td style={{ padding: "8px 4px", textAlign: "center", fontSize: 12 }}>{s.Gate}</td>
@@ -383,6 +447,25 @@ const SalikTable = ({
                     fontWeight: "bold",
                     color: s.Contract ? "#1976d2" : "#f44336",
                     fontSize: 12
+                  }}>
+                    {s.Contract || 'N/A'}
+                  </td>
+                  <td style={{ padding: "8px 4px", textAlign: "center", fontSize: 12, fontWeight: "bold", color: "#673ab7" }}>{s.CustomerName}</td>
+                  <td style={{ padding: "8px 4px", textAlign: "center", color: "#388e3c", fontSize: 12 }}>
+                    {s.Contract_Start ? formatDateTime(s.Contract_Start) : ''}
+                  </td>
+                  <td style={{ 
+                    padding: "8px 4px", 
+                    textAlign: "center",
+                    color: s.Contract_End === 'Open' ? "#ff5722" : "#388e3c",
+                    fontWeight: s.Contract_End === 'Open' ? "bold" : "normal",
+                    fontSize: 12
+                  }}>
+                    {s.Contract_End === 'Open' ? 'Open' : (s.Contract_End ? formatDateTime(s.Contract_End) : '')}
+                  </td>
+                  <td style={{ 
+                    padding: "8px 4px", 
+                    textAlign: "center",
                   }}>
                     {editingIndex === originalIndex ? (
                         <input
@@ -410,14 +493,13 @@ const SalikTable = ({
                         />
                         ) : (
                         <div>
-                            {s.Contract || 'N/A'}
                             <button 
                                 onClick={() => {
                                 setEditingIndex(originalIndex);
                                 setNewContract(s.Contract || '');
                                 }} 
                                 style={{
-                                marginLeft: '5px', 
+                                marginRight: '5px', 
                                 padding: '2px 5px', 
                                 fontSize: '10px',
                                 cursor: 'pointer',
@@ -428,21 +510,23 @@ const SalikTable = ({
                             >
                                 {s.Contract ? 'Edit' : 'Add'}
                             </button>
+                            {(s.matchType === 'unmatched' || s.matchType === 'replacement') && (
+                                <button
+                                    onClick={() => handleAutoMatchSalik(originalIndex)}
+                                    style={{
+                                        padding: '2px 5px',
+                                        fontSize: '10px',
+                                        cursor: 'pointer',
+                                        backgroundColor: '#E0F2F1',
+                                        border: '1px solid #00796B',
+                                        borderRadius: '3px'
+                                    }}
+                                >
+                                    Check
+                                </button>
+                            )}
                         </div>
                         )}
-                  </td>
-                  <td style={{ padding: "8px 4px", textAlign: "center", fontSize: 12, fontWeight: "bold", color: "#673ab7" }}>{s.CustomerName}</td>
-                  <td style={{ padding: "8px 4px", textAlign: "center", color: "#388e3c", fontSize: 12 }}>
-                    {s.Contract_Start ? formatDateTime(s.Contract_Start) : ''}
-                  </td>
-                  <td style={{ 
-                    padding: "8px 4px", 
-                    textAlign: "center",
-                    color: s.Contract_End === 'Open' ? "#ff5722" : "#388e3c",
-                    fontWeight: s.Contract_End === 'Open' ? "bold" : "normal",
-                    fontSize: 12
-                  }}>
-                    {s.Contract_End === 'Open' ? 'Open' : (s.Contract_End ? formatDateTime(s.Contract_End) : '')}
                   </td>
                 </tr>
                 )}
