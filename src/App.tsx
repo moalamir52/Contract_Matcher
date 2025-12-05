@@ -514,32 +514,82 @@ export default function App() {
   };
 
   const handleRevenueCheck = () => {
+    console.log('=== Revenue Check Started ===');
+    console.log('Revenue Data Length:', revenueData?.length || 0);
+    console.log('Selected Rows:', Array.from(selectedRows));
+    console.log('Current View:', view);
+    
     if (!revenueData || revenueData.length === 0) {
+      console.log('❌ No revenue data found');
       alert("Please upload the Revenue file first.");
       return;
     }
     
     if (selectedRows.size === 0) {
+      console.log('❌ No rows selected');
       alert("Please select rows to check revenue for.");
       return;
     }
 
     let updatedCount = 0;
-    const newSalikData = [...salikData];
+    const dataToCheck = view === 'parking' ? parkingData : salikData;
+    const newData = [...dataToCheck];
+    
+    console.log('Data to check length:', dataToCheck.length);
+    
+    // Store before counts
+    let beforeMatched = 0, beforeReplacement = 0, beforeUnmatched = 0;
+    
+    // Calculate counts BEFORE processing
+    if (view === 'parking') {
+      const beforeTypedData = dataToCheck.filter((p: any) => {
+        const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+        const hasInvygoPlate = invygoPlates.includes(plateNumber);
+        const hasDealerBooking = p.Contract && dealerBookings && dealerBookings.some((booking: any) => 
+            booking['Agreement']?.toString() === p.Contract?.toString()
+        );
+        return parkingType === 'invygo' ? (hasInvygoPlate || hasDealerBooking) : !(hasInvygoPlate || hasDealerBooking);
+      });
+      
+      beforeMatched = beforeTypedData.filter((p: any) => {
+        const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+        const isInInvygoPlates = invygoPlates.includes(plateNumber);
+        return p.Contract && p.Dealer_Booking_Number && p.Customer_Name && (isInInvygoPlates || p.matched);
+      }).length;
+      
+      beforeReplacement = beforeTypedData.filter((p: any) => {
+        const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+        const isInInvygoPlates = invygoPlates.includes(plateNumber);
+        return p.Contract && p.Dealer_Booking_Number && p.Customer_Name && !isInInvygoPlates && !p.matched;
+      }).length;
+      
+      beforeUnmatched = beforeTypedData.filter((p: any) => {
+        const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+        const isInInvygoPlates = invygoPlates.includes(plateNumber);
+        return (!p.Contract || !p.Dealer_Booking_Number || !p.Customer_Name) && isInInvygoPlates;
+      }).length;
+      
+      console.log('📊 BEFORE Revenue Check:');
+      console.log('  Matched:', beforeMatched);
+      console.log('  Replacement:', beforeReplacement);
+      console.log('  Unmatched:', beforeUnmatched);
+      console.log('  Total:', beforeTypedData.length);
+    }
 
-    newSalikData.forEach((salikItem, index) => {
-      if (selectedRows.has(index) && (salikItem.matchType === 'unmatched' || salikItem.matchType === 'replacement')) {
-        const salikPlate = (salikItem['Plate_Number'] || '').toString().replace(/\s/g, '').trim().toUpperCase();
-
-        if (salikPlate === 'E26365') {
-          console.log('--- Tracing E26365 ---');
-          console.log('Found Salik Item for E26365:', salikItem);
-        }
-
-        const salikDate = parseExcelDate(salikItem['Trip_Date']);
-        const formattedSalikDate = formatDate(salikDate);
+    newData.forEach((item, index) => {
+      if (selectedRows.has(index)) {
+        console.log(`\n--- Processing Row ${index} ---`);
         
-        if (!salikPlate || !formattedSalikDate) {
+        const itemPlate = (item['Plate_Number'] || '').toString().replace(/\s/g, '').trim().toUpperCase();
+        const itemDate = view === 'parking' ? parseExcelDate(item['Date']) : parseExcelDate(item['Trip_Date']);
+        const formattedItemDate = formatDate(itemDate);
+        
+        console.log('Item Plate:', itemPlate);
+        console.log('Item Date:', formattedItemDate);
+        console.log('Item Data:', item);
+        
+        if (!itemPlate || !formattedItemDate) {
+          console.log('❌ Missing plate or date, skipping');
           return;
         }
 
@@ -550,35 +600,214 @@ export default function App() {
           if (!revPlate || !revDateObj) return false;
           
           const formattedRevDate = formatDate(revDateObj);
-          return revPlate === salikPlate && formattedRevDate === formattedSalikDate;
+          const isMatch = revPlate === itemPlate && formattedRevDate === formattedItemDate;
+          
+          if (isMatch) {
+            console.log('✅ Revenue Match Found:', rev);
+          }
+          
+          return isMatch;
         });
-
-
 
         if (revenueMatch) {
           const contractNo = revenueMatch['Contract No.'];
+          console.log('Contract No from revenue:', contractNo);
+          
           if (contractNo) {
-            updateSalikInfo(index, contractNo);
+            if (view === 'parking') {
+              console.log('🅿️ Updating parking info with contract:', contractNo);
+              // Inlined updateParkingInfo logic to modify the local 'newData' array directly
+              const contractNoHeaderVal = findHeader(['Contract No.']);
+              const customerHeaderVal = findHeader(['Customer', 'Customer Name']);
+              const pickupHeaderVal = findHeader(['Pick-up Date', 'Pickup Date']);
+              const dropoffHeaderVal = findHeader(['Drop-off Date', 'Dropoff Date', 'Drop off Date']);
+              const statusHeaderVal = findHeader(['Status']);
+
+              if (contractNoHeaderVal) {
+                const contract = contracts.find((c: any) => 
+                  c[contractNoHeaderVal]?.toString().trim().toLowerCase() === contractNo.toString().trim().toLowerCase()
+                );
+
+                if (contract) {
+                  const parkingItem = newData[index]; // Modify item in the local 'newData' array
+
+                  parkingItem.Contract = contract[contractNoHeaderVal];
+                  
+                  if (customerHeaderVal) {
+                    parkingItem.Customer_Contract = contract[customerHeaderVal];
+                  }
+                  if (pickupHeaderVal) {
+                    parkingItem.Contract_Start = contract[pickupHeaderVal];
+                  }
+                  if (dropoffHeaderVal) {
+                    const status = statusHeaderVal ? contract[statusHeaderVal]?.toString().toLowerCase() : '';
+                    if (status === 'open' || status === 'active') {
+                      parkingItem.Contract_End = 'Open';
+                    } else {
+                      parkingItem.Contract_End = contract[dropoffHeaderVal];
+                    }
+                  }
+
+                  const plateNumber = (parkingItem.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+                  if (invygoPlates.includes(plateNumber)) {
+                    const dealerBooking = dealerBookings.find((booking: any) => 
+                      booking['Agreement']?.toString().trim().toLowerCase() === contractNo?.toString().trim().toLowerCase()
+                    );
+                    
+                    if (dealerBooking) {
+                      parkingItem.Dealer_Booking_Number = dealerBooking['Booking ID'];
+                      parkingItem.Customer_Name = dealerBooking['Customer'] || dealerBooking['Customer Name'] || '';
+                      
+                      const brandName = dealerBooking['Brand Name'] || '';
+                      const carName = dealerBooking['Car Name'] || '';
+                      const carYear = dealerBooking['Car Year'] || '';
+                      parkingItem.Model = [brandName, carName, carYear].filter(part => part).join(' ');
+                    }
+                  } else {
+                    const bookingNumberHeader = findHeader(['Booking Number', 'Booking No', 'Booking ID']);
+                    const pickupBranchHeader = findHeader(['Pick-up Branch', 'Pickup Branch', 'Branch']);
+                    const modelHeaderContract = findHeader(['Model', 'Car Model', 'Vehicle Model']);
+                    
+                    if(bookingNumberHeader) parkingItem.Booking_Number = contract[bookingNumberHeader] || '';
+                    if(pickupBranchHeader) parkingItem.Pickup_Branch = contract[pickupBranchHeader] || '';
+                    if(modelHeaderContract) parkingItem.Model_Contract = contract[modelHeaderContract] || '';
+                  }
+                  
+                  parkingItem.manual_update = true;
+                  parkingItem.matched = true;
+                  console.log('✅ Parking info updated in local array');
+                } else {
+                  console.log(`❌ Contract ${contractNo} not found in contracts file. Will clear item.`);
+                  const parkingItem = newData[index]; // Get the item to modify
+                  console.log('🧹 Clearing contract info for item with non-existent contract. Before:', JSON.parse(JSON.stringify(parkingItem)));
+                  
+                  parkingItem.Contract = '';
+                  parkingItem.manual_update = false;
+                  parkingItem.Dealer_Booking_Number = '';
+                  parkingItem.Customer_Name = '';
+                  parkingItem.Customer_Contract = '';
+                  parkingItem.Contract_Start = '';
+                  parkingItem.Contract_End = '';
+                  parkingItem.matched = false;
+                  
+                  console.log('✅ Parking item cleared. After:', JSON.parse(JSON.stringify(parkingItem)));
+                }
+              }
+            } else {
+              console.log('🚗 Updating salik info with contract:', contractNo);
+              updateSalikInfo(index, contractNo);
+              console.log('✅ Salik info updated');
+            }
             updatedCount++;
+            console.log('✅ Updated with contract:', contractNo);
+          } else {
+            console.log('❌ No contract number in revenue match');
           }
         } else {
-          const salikItemToUpdate = newSalikData[index];
-          salikItemToUpdate.Contract = '';
-          salikItemToUpdate.CustomerName = '';
-          salikItemToUpdate.Contract_Start = '';
-          salikItemToUpdate.Contract_End = '';
-          salikItemToUpdate.matchType = 'unmatched';
-          salikItemToUpdate.manual_update = false;
+          console.log('❌ No revenue match found');
+          
+          // Clear contract info for unmatched items in both parking and salik
+          const itemToUpdate = newData[index];
+          console.log('🧹 Clearing contract info for unmatched item');
+          console.log('Before clearing:', itemToUpdate);
+          
+          itemToUpdate.Contract = '';
+          itemToUpdate.manual_update = false;
+          
+          if (view === 'salik') {
+            itemToUpdate.CustomerName = '';
+            itemToUpdate.Contract_Start = '';
+            itemToUpdate.Contract_End = '';
+            itemToUpdate.matchType = 'unmatched';
+            console.log('✅ Salik item cleared');
+          } else if (view === 'parking') {
+            itemToUpdate.Dealer_Booking_Number = '';
+            itemToUpdate.Customer_Name = '';
+            itemToUpdate.Customer_Contract = '';
+            itemToUpdate.Contract_Start = '';
+            itemToUpdate.Contract_End = '';
+            itemToUpdate.matched = false;
+            console.log('✅ Parking item cleared');
+          }
+          
+          console.log('After clearing:', itemToUpdate);
           updatedCount++;
         }
       }
     });
 
+    console.log('\n=== Revenue Check Summary ===');
+    console.log('Updated Count:', updatedCount);
+    
+    // Calculate counts AFTER processing
+    if (view === 'parking') {
+      const afterTypedData = newData.filter((p: any) => {
+        const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+        const hasInvygoPlate = invygoPlates.includes(plateNumber);
+        const hasDealerBooking = p.Contract && dealerBookings && dealerBookings.some((booking: any) => 
+            booking['Agreement']?.toString() === p.Contract?.toString()
+        );
+        return parkingType === 'invygo' ? (hasInvygoPlate || hasDealerBooking) : !(hasInvygoPlate || hasDealerBooking);
+      });
+      
+      const afterMatched = afterTypedData.filter((p: any) => {
+        const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+        const isInInvygoPlates = invygoPlates.includes(plateNumber);
+        return p.Contract && p.Dealer_Booking_Number && p.Customer_Name && (isInInvygoPlates || p.matched);
+      }).length;
+      
+      const afterReplacement = afterTypedData.filter((p: any) => {
+        const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+        const isInInvygoPlates = invygoPlates.includes(plateNumber);
+        return p.Contract && p.Dealer_Booking_Number && p.Customer_Name && !isInInvygoPlates && !p.matched;
+      }).length;
+      
+      const afterUnmatched = afterTypedData.filter((p: any) => {
+        const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+        const isInInvygoPlates = invygoPlates.includes(plateNumber);
+        return (!p.Contract || !p.Dealer_Booking_Number || !p.Customer_Name) && isInInvygoPlates;
+      }).length;
+      
+      console.log('📊 AFTER Revenue Check:');
+      console.log('  Matched:', afterMatched);
+      console.log('  Replacement:', afterReplacement);
+      console.log('  Unmatched:', afterUnmatched);
+      console.log('  Total:', afterTypedData.length);
+      
+      console.log('🔄 CHANGES:');
+      console.log('  Matched change:', afterMatched - beforeMatched);
+      console.log('  Replacement change:', afterReplacement - beforeReplacement);
+      console.log('  Unmatched change:', afterUnmatched - beforeUnmatched);
+    }
+    
     if (updatedCount > 0) {
-      setSalikData(newSalikData);
+      console.log('\n🔄 Updating state with new data');
+      if (view === 'parking') {
+        console.log('🅿️ Setting parking data with', newData.length, 'records');
+        setParkingData(newData);
+        console.log('✅ Parking data updated');
+        
+        // Auto-switch to matched filter if we're currently viewing unmatched
+        if (parkingFilter === 'unmatched') {
+          console.log('🔄 Switching to matched filter to show updated records');
+          setParkingFilter('matched');
+        }
+      } else {
+        console.log('🚗 Setting salik data with', newData.length, 'records');
+        setSalikData(newData);
+        console.log('✅ Salik data updated');
+        
+        // Auto-switch to matched filter if we're currently viewing unmatched
+        if (salikFilter === 'unmatched') {
+          console.log('🔄 Switching to matched filter to show updated records');
+          setSalikFilter('matched');
+        }
+      }
       setSelectedRows(new Set());
+      console.log('✅ Selected rows cleared');
       alert(`${updatedCount} selected records have been updated based on the revenue file.`);
     } else {
+      console.log('❌ No updates made');
       alert("No new matches found in the revenue file for the selected records.");
     }
   };
@@ -644,9 +873,32 @@ export default function App() {
       }
       
       parkingItem.manual_update = true;
+      parkingItem.matched = true;
       setParkingData(newParkingData);
     } else {
-      alert(`Contract with number "${contractNo}" not found.`);
+      console.log(`🅿️ [Manual Edit] Contract ${contractNo} not found in contracts file. Clearing item.`);
+      const newParkingData = [...parkingData];
+      const parkingItem = newParkingData[parkingIndex];
+      
+      console.log('🧹 Clearing contract info. Before:', JSON.parse(JSON.stringify(parkingItem)));
+
+      parkingItem.Contract = '';
+      parkingItem.Customer_Contract = '';
+      parkingItem.Contract_Start = '';
+      parkingItem.Contract_End = '';
+      parkingItem.Dealer_Booking_Number = '';
+      parkingItem.Customer_Name = '';
+      parkingItem.Model = '';
+      parkingItem.Booking_Number = '';
+      parkingItem.Pickup_Branch = '';
+      parkingItem.Model_Contract = '';
+      parkingItem.manual_update = false;
+      parkingItem.matched = false;
+
+      console.log('✅ Parking item cleared. After:', JSON.parse(JSON.stringify(parkingItem)));
+      
+      setParkingData(newParkingData);
+      alert(`Contract ${contractNo} was not found. The parking record has been cleared and marked as unmatched.`);
     }
   };
 
@@ -956,7 +1208,7 @@ export default function App() {
             {view === 'contracts' && <ContractsTable contractsToShow={contractsToShow} invygoSummary={invygoSummary} setInvygoFilter={setInvygoFilter} invygoFilter={invygoFilter} setSelectedContract={setSelectedContract} contractNoHeader={contractNoHeader} customerHeader={customerHeader} plateNoHeader={plateNoHeader} pickupHeader={pickupHeader} dropoffHeader={dropoffHeader} findHeader={findHeader} />}
             {view === 'unrented' && <UnrentedTable unrentedToShow={unrentedToShow} />}
             {view === 'repeated' && <RepeatedTable repeatedToShow={repeatedToShow} setSelectedContract={setSelectedContract} contractNoHeader={contractNoHeader} customerHeader={customerHeader} pickupHeader={pickupHeader} dropoffHeader={dropoffHeader} statusHeader={statusHeader} />}
-            {view === 'parking' && <ParkingTable parkingData={parkingData} parkingType={parkingType} setParkingFilter={setParkingFilter} parkingFilter={parkingFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateParkingInfo={updateParkingInfo} selectedRows={selectedRows} setSelectedRows={setSelectedRows} dealerBookings={dealerBookings} />}
+            {view === 'parking' && <ParkingTable parkingData={parkingData} parkingType={parkingType} setParkingFilter={setParkingFilter} parkingFilter={parkingFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateParkingInfo={updateParkingInfo} selectedRows={selectedRows} setSelectedRows={setSelectedRows} dealerBookings={dealerBookings} handleRevenueCheck={handleRevenueCheck} />}
             {view === 'salik' && !showSalikSummary && <SalikTable salikData={salikData} salikType={salikType} setSalikFilter={setSalikFilter} salikFilter={salikFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateSalikInfo={updateSalikInfo} selectedRows={selectedRows} setSelectedRows={setSelectedRows} dealerBookings={dealerBookings} setShowSalikSummary={setShowSalikSummary} setSalikData={setSalikData} handleAutoMatchSalik={handleAutoMatchSalik} handleRevenueCheck={handleRevenueCheck} />}
             {view === 'salik' && showSalikSummary && <SalikSummaryTable salikData={salikData} salikType={salikType} invygoPlates={invygoPlates} search={search} setShowSalikSummary={setShowSalikSummary} dealerBookings={dealerBookings} summaryFilter={summaryFilter} setSummaryFilter={setSummaryFilter} />}
           </>
@@ -967,7 +1219,7 @@ export default function App() {
             {view === 'contracts' && <ContractsTable contractsToShow={contractsToShow} invygoSummary={invygoSummary} setInvygoFilter={setInvygoFilter} invygoFilter={invygoFilter} setSelectedContract={setSelectedContract} contractNoHeader={contractNoHeader} customerHeader={customerHeader} plateNoHeader={plateNoHeader} pickupHeader={pickupHeader} dropoffHeader={dropoffHeader} findHeader={findHeader} />}
             {view === 'unrented' && <UnrentedTable unrentedToShow={unrentedToShow} />}
             {view === 'repeated' && <RepeatedTable repeatedToShow={repeatedToShow} setSelectedContract={setSelectedContract} contractNoHeader={contractNoHeader} customerHeader={customerHeader} pickupHeader={pickupHeader} dropoffHeader={dropoffHeader} statusHeader={statusHeader} />}
-            {view === 'parking' && <ParkingTable parkingData={parkingData} parkingType={parkingType} setParkingFilter={setParkingFilter} parkingFilter={parkingFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateParkingInfo={updateParkingInfo} selectedRows={selectedRows} setSelectedRows={setSelectedRows} dealerBookings={dealerBookings} />}
+            {view === 'parking' && <ParkingTable parkingData={parkingData} parkingType={parkingType} setParkingFilter={setParkingFilter} parkingFilter={parkingFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateParkingInfo={updateParkingInfo} selectedRows={selectedRows} setSelectedRows={setSelectedRows} dealerBookings={dealerBookings} handleRevenueCheck={handleRevenueCheck} />}
             {view === 'salik' && !showSalikSummary && <SalikTable salikData={salikData} salikType={salikType} setSalikFilter={setSalikFilter} salikFilter={salikFilter} invygoPlates={invygoPlates} search={search} copyToClipboard={copyToClipboard} updateSalikInfo={updateSalikInfo} selectedRows={selectedRows} setSelectedRows={setSelectedRows} dealerBookings={dealerBookings} setShowSalikSummary={setShowSalikSummary} setSalikData={setSalikData} handleAutoMatchSalik={handleAutoMatchSalik} handleRevenueCheck={handleRevenueCheck} />}
             {view === 'salik' && showSalikSummary && <SalikSummaryTable salikData={salikData} salikType={salikType} invygoPlates={invygoPlates} search={search} setShowSalikSummary={setShowSalikSummary} dealerBookings={dealerBookings} summaryFilter={summaryFilter} setSummaryFilter={setSummaryFilter} />}
           </>

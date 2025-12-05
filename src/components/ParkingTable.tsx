@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { formatDate, formatDateTime } from '../utils/dates';
 
 const ParkingTable = ({ 
@@ -12,11 +12,18 @@ const ParkingTable = ({
     updateParkingInfo,
     selectedRows,
     setSelectedRows,
-    dealerBookings
+    dealerBookings,
+    handleRevenueCheck
 }: any) => {
 
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [newContract, setNewContract] = useState('');
+    const [forceUpdate, setForceUpdate] = useState(0);
+    
+    // Force re-render when parkingData changes
+    useEffect(() => {
+        setForceUpdate(prev => prev + 1);
+    }, [parkingData]);
 
     const isInvygoCar = (p: any) => {
         const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
@@ -37,14 +44,20 @@ const ParkingTable = ({
 
     const matchedParking = typedParkingData.filter((p: any) => {
         if (parkingType === 'invygo') {
-            return p.Contract && p.Dealer_Booking_Number && p.Customer_Name;
+            // Count as matched if it has contract info AND (is in invygo plates OR manually matched)
+            const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+            const isInInvygoPlates = invygoPlates.includes(plateNumber);
+            return p.Contract && p.Dealer_Booking_Number && p.Customer_Name && (isInInvygoPlates || p.matched);
         } else {
             return p.Contract && p.Customer_Contract;
         }
     });
     const unmatchedParking = typedParkingData.filter((p: any) => {
         if (parkingType === 'invygo') {
-            return !p.Contract || !p.Dealer_Booking_Number || !p.Customer_Name;
+            const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+            const isInInvygoPlates = invygoPlates.includes(plateNumber);
+            // Unmatched: no contract info AND is in invygo plates
+            return (!p.Contract || !p.Dealer_Booking_Number || !p.Customer_Name) && isInInvygoPlates;
         } else {
             return !p.Contract || !p.Customer_Contract;
         }
@@ -96,6 +109,20 @@ const ParkingTable = ({
         >
           {matchedParking.length}
         </span> &nbsp; | &nbsp;
+        🔄 Replacement: <span
+            onClick={() => setParkingFilter('replacement')}
+            style={{color: "#f57c00", cursor: 'pointer', textDecoration: 'underline'}}
+        >
+            {typedParkingData.filter((p: any) => {
+                if (parkingType === 'invygo') {
+                    const plateNumber = (p.Plate_Number || '').toString().replace(/\s/g, '').trim().toUpperCase();
+                    const isInInvygoPlates = invygoPlates.includes(plateNumber);
+                    return p.Contract && p.Dealer_Booking_Number && p.Customer_Name && !isInInvygoPlates;
+                } else {
+                    return 0;
+                }
+            }).length}
+        </span> &nbsp; | &nbsp;
         ❌ Unmatched: <span 
           onClick={() => setParkingFilter('unmatched')} 
           style={{color: "#f44336", cursor: 'pointer', textDecoration: 'underline'}}
@@ -111,6 +138,24 @@ const ParkingTable = ({
         {parkingFilter !== 'all' && (
           <span onClick={() => setParkingFilter('all')} style={{cursor: 'pointer', textDecoration: 'underline', marginLeft: '10px'}}> (Show All)</span>
         )}
+      </div>
+      
+      <div style={{ margin: "16px 0", display: "flex", gap: "10px" }}>
+        <button
+          onClick={handleRevenueCheck}
+          style={{
+            background: "#2196F3",
+            color: "white",
+            border: "none",
+            borderRadius: 8,
+            fontWeight: "bold",
+            fontSize: 14,
+            padding: "8px 16px",
+            cursor: "pointer"
+          }}
+        >
+          💰 Check Revenue
+        </button>
       </div>
 
       <div style={{
@@ -149,14 +194,24 @@ const ParkingTable = ({
                     }
                     if (parkingFilter === 'matched') {
                       if (parkingType === 'invygo') {
-                        if (!p.Contract || !p.Dealer_Booking_Number || !p.Customer_Name) return false;
+                        const isInInvygoPlates = invygoPlates.includes(plateNumber);
+                        if (!p.Contract || !p.Dealer_Booking_Number || !p.Customer_Name || (!isInInvygoPlates && !p.matched)) return false;
                       } else {
                         if (!p.Contract || !p.Customer_Contract) return false;
                       }
                     }
+                    if (parkingFilter === 'replacement') {
+                      if (parkingType === 'invygo') {
+                        const isInInvygoPlates = invygoPlates.includes(plateNumber);
+                        if (!p.Contract || !p.Dealer_Booking_Number || !p.Customer_Name || isInInvygoPlates) return false;
+                      } else {
+                        return false;
+                      }
+                    }
                     if (parkingFilter === 'unmatched') {
                       if (parkingType === 'invygo') {
-                        if (p.Contract && p.Dealer_Booking_Number && p.Customer_Name) return false;
+                        const isInInvygoPlates = invygoPlates.includes(plateNumber);
+                        if ((p.Contract && p.Dealer_Booking_Number && p.Customer_Name) || !isInInvygoPlates) return false;
                       } else {
                         if (p.Contract && p.Customer_Contract) return false;
                       }
@@ -176,14 +231,24 @@ const ParkingTable = ({
                       }
                       if (parkingFilter === 'matched') {
                         if (parkingType === 'invygo') {
-                          if (!p.Contract || !p.Dealer_Booking_Number || !p.Customer_Name) return false;
+                          const isInInvygoPlates = invygoPlates.includes(plateNumber);
+                          if (!p.Contract || !p.Dealer_Booking_Number || !p.Customer_Name || (!isInInvygoPlates && !p.matched)) return false;
                         } else {
                           if (!p.Contract || !p.Customer_Contract) return false;
                         }
                       }
+                      if (parkingFilter === 'replacement') {
+                        if (parkingType === 'invygo') {
+                          const isInInvygoPlates = invygoPlates.includes(plateNumber);
+                          if (!p.Contract || !p.Dealer_Booking_Number || !p.Customer_Name || isInInvygoPlates) return false;
+                        } else {
+                          return false;
+                        }
+                      }
                       if (parkingFilter === 'unmatched') {
                         if (parkingType === 'invygo') {
-                          if (p.Contract && p.Dealer_Booking_Number && p.Customer_Name) return false;
+                          const isInInvygoPlates = invygoPlates.includes(plateNumber);
+                          if ((p.Contract && p.Dealer_Booking_Number && p.Customer_Name) || !isInInvygoPlates) return false;
                         } else {
                           if (p.Contract && p.Customer_Contract) return false;
                         }
@@ -243,14 +308,24 @@ const ParkingTable = ({
                 // Apply parking filter
                 if (parkingFilter === 'matched') {
                     if (parkingType === 'invygo') {
-                        if (!p.Contract || !p.Dealer_Booking_Number || !p.Customer_Name) return false;
+                        const isInInvygoPlates = invygoPlates.includes(plateNumber);
+                        if (!p.Contract || !p.Dealer_Booking_Number || !p.Customer_Name || (!isInInvygoPlates && !p.matched)) return false;
                     } else {
                         if (!p.Contract || !p.Customer_Contract) return false;
                     }
                 }
+                if (parkingFilter === 'replacement') {
+                    if (parkingType === 'invygo') {
+                        const isInInvygoPlates = invygoPlates.includes(plateNumber);
+                        if (!p.Contract || !p.Dealer_Booking_Number || !p.Customer_Name || isInInvygoPlates) return false;
+                    } else {
+                        return false;
+                    }
+                }
                 if (parkingFilter === 'unmatched') {
                     if (parkingType === 'invygo') {
-                        if (p.Contract && p.Dealer_Booking_Number && p.Customer_Name) return false;
+                        const isInInvygoPlates = invygoPlates.includes(plateNumber);
+                        if ((p.Contract && p.Dealer_Booking_Number && p.Customer_Name) || !isInInvygoPlates) return false;
                     } else {
                         if (p.Contract && p.Customer_Contract) return false;
                     }
